@@ -48,7 +48,7 @@ def radixVersion() {
     return version
 }
 
-group 'com.radixdlt'
+group 'com.radixdlt.radixdlt'
 version radixVersion()
 
 subprojects {
@@ -88,7 +88,7 @@ subprojects {
         maven { url 'https://jitpack.io' }
     }
 
-    group 'com.radixdlt'
+    group 'com.radixdlt.radixdlt'
     version rootProject.version
 
     gradle.projectsEvaluated {
