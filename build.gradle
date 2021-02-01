@@ -48,6 +48,7 @@ def radixVersion() {
     return version
 }
 
+
 group 'com.radixdlt.radixdlt'
 version radixVersion()
 
