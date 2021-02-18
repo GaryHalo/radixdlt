@@ -117,7 +117,7 @@ public final class Pacemaker {
 
 	/** Processes a local view update message **/
 	public void processViewUpdate(ViewUpdate viewUpdate) {
-		log.trace("View Update: {}", viewUpdate);
+		log.info("View Update: {}", viewUpdate);
 
 		final View previousView = this.latestViewUpdate.getCurrentView();
 		if (viewUpdate.getCurrentView().lte(previousView)) {
@@ -153,7 +153,7 @@ public final class Pacemaker {
 		if (this.self.equals(currentViewProposer)) {
 			Optional<Proposal> proposalMaybe = generateProposal(latestViewUpdate.getCurrentView());
 			proposalMaybe.ifPresent(proposal -> {
-				log.trace("Broadcasting proposal: {}", proposal);
+				log.info("Broadcasting proposal: {}", proposal);
 				this.proposalBroadcaster.broadcastProposal(proposal, this.validatorSet.nodes());
 				this.counters.increment(CounterType.BFT_PROPOSALS_MADE);
 			});
@@ -196,11 +196,11 @@ public final class Pacemaker {
 		final View view = scheduledTimeout.view();
 
 		if (!view.equals(this.latestViewUpdate.getCurrentView())) {
-			log.trace("LocalTimeout: Ignoring timeout {}, current is {}", scheduledTimeout, this.latestViewUpdate.getCurrentView());
+			log.info("LocalTimeout: Ignoring timeout {}, current is {}", scheduledTimeout, this.latestViewUpdate.getCurrentView());
 			return;
 		}
 
-		log.trace("LocalTimeout: {}", scheduledTimeout);
+		log.info("LocalTimeout: {}", scheduledTimeout);
 
 		this.isViewTimedOut = true;
 
