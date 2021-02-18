@@ -103,9 +103,11 @@ public final class MessageCentralBFTNetwork implements ProposalBroadcaster, BFTE
 
 	private void sendVote(BFTNode receiver, Vote vote) {
 		if (this.self.equals(receiver)) {
+			log.info("Sending a vote to self (dispatching local message) {}", vote);
 			this.localMessages.onNext(vote);
 		} else {
 			ConsensusEventMessage message = new ConsensusEventMessage(this.magic, vote);
+			log.info("Created consensus event message out of a vote and about to send it");
 			send(message, receiver);
 		}
 	}

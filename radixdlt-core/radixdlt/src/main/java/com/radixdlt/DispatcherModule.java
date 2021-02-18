@@ -368,7 +368,7 @@ public class DispatcherModule extends AbstractModule {
 	) {
 		RemoteEventDispatcher<Vote> dispatcher = environment.getRemoteDispatcher(Vote.class);
 		return (node, vote) -> {
-			logger.trace("Vote sending to {}: {}", node, vote);
+			logger.info("Vote sending to {}: {}", node, vote);
 			dispatcher.dispatch(node, vote);
 			processors.forEach(e -> e.process(vote));
 		};

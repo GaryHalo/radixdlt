@@ -151,7 +151,6 @@ public final class BFTEventReducer implements BFTEventProcessor {
 			this.latestViewUpdate.getHighQC()
 		);
 
-
 		maybeVote.ifPresentOrElse(
 			vote -> {
 				log.info("Sending vote {}, next leader is = {}", vote, this.latestViewUpdate.getNextLeader());

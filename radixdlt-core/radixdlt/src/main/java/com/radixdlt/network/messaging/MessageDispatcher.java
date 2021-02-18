@@ -72,6 +72,8 @@ class MessageDispatcher {
 	}
 
 	CompletableFuture<SendResult> send(TransportManager transportManager, final OutboundMessageEvent outboundMessage) {
+		log.info("Message dispatcher send {}", outboundMessage.message().getClass().getSimpleName());
+
 		final Message message = outboundMessage.message();
 		final Peer peer = outboundMessage.peer();
 
@@ -98,7 +100,7 @@ class MessageDispatcher {
 	}
 
 	private CompletableFuture<SendResult> send(TransportOutboundConnection conn, Message message, byte[] bytes) {
-		log.trace("Sending to {}: {}", conn, message);
+		log.info("Sending (got conn) to {}: {}", conn, message);
 		this.counters.add(CounterType.NETWORKING_SENT_BYTES, bytes.length);
 		return conn.send(bytes);
 	}

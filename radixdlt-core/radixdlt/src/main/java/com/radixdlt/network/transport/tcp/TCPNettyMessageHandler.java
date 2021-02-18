@@ -66,9 +66,8 @@ final class TCPNettyMessageHandler extends SimpleChannelInboundHandler<ByteBuf> 
 			.onBackpressureBuffer(
 				this.bufferSize,
 				() -> {
+					log.info("Inbound message is dropped....");
 					this.counters.increment(CounterType.NETWORKING_TCP_DROPPED_MESSAGES);
-					Level logLevel = droppedMessagesRateLimiter.tryAcquire() ? Level.WARN : Level.TRACE;
-					log.log(logLevel, "TCP msg buffer overflow, dropping msg");
 				},
 				BackpressureOverflowStrategy.DROP_LATEST)
 			.map(this::parseMessage);
@@ -95,6 +94,7 @@ final class TCPNettyMessageHandler extends SimpleChannelInboundHandler<ByteBuf> 
 				data = new byte[length];
 				buf.readBytes(data);
 			}
+			log.info("Read raw message on tcp socket and pushing to message sink");
 			this.rawMessageSink.onNext(Pair.of(sender, data));
 		} else if (logRateLimiter.tryAcquire()) {
 			String type = socketSender == null ? null : socketSender.getClass().getName();
@@ -104,6 +104,7 @@ final class TCPNettyMessageHandler extends SimpleChannelInboundHandler<ByteBuf> 
 	}
 
 	private InboundMessage parseMessage(Pair<InetSocketAddress, byte[]> rawData) {
+		log.info("Parsing raw message...");
 		final TransportInfo source = TransportInfo.of(
 			TCPConstants.NAME,
 			StaticTransportMetadata.of(
