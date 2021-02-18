@@ -120,20 +120,25 @@ public final class BFTEventReducer implements BFTEventProcessor {
 	private void tryVote() {
 		BFTInsertUpdate update = this.latestInsertUpdate;
 		if (update == null) {
+			log.info("Cannot vote because update is null");
 			return;
 		}
 
 		if (!Objects.equals(update.getHeader().getView(), this.latestViewUpdate.getCurrentView())) {
+			log.info("Not voting because update.getHeader.getView {} is not equal to latestViewUpdate.currentView {}",
+					update.getHeader().getView(), this.latestViewUpdate.getCurrentView());
 			return;
 		}
 
 		// check if already voted in this round
 		if (this.safetyRules.getLastVote(this.latestViewUpdate.getCurrentView()).isPresent()) {
+			log.info("Not voting because I have already voted for this view {}", latestViewUpdate.getCurrentView());
 			return;
 		}
 
 		// don't vote if view has timed out
 		if (this.isViewTimedOut) {
+			log.info("Not voting because the view has timed out");
 			return;
 		}
 
@@ -145,9 +150,17 @@ public final class BFTEventReducer implements BFTEventProcessor {
 			update.getInserted().getTimeOfExecution(),
 			this.latestViewUpdate.getHighQC()
 		);
+
+
 		maybeVote.ifPresentOrElse(
-			vote -> this.voteDispatcher.dispatch(nextLeader, vote),
-			() -> this.noVoteDispatcher.dispatch(NoVote.create(update.getInserted().getVertex()))
+			vote -> {
+				log.info("Sending vote {}, next leader is = {}", vote, this.latestViewUpdate.getNextLeader());
+				this.voteDispatcher.dispatch(nextLeader, vote);
+			},
+			() -> {
+				log.info("Sending NoVote (what's that?)");
+				this.noVoteDispatcher.dispatch(NoVote.create(update.getInserted().getVertex()));
+			}
 		);
 	}
 

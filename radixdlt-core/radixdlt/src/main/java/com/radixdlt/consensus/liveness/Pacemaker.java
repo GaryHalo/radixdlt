@@ -138,6 +138,7 @@ public final class Pacemaker {
 			return;
 		}
 
+		log.info("Pacemaker is processing bft insert update, about to send an empty timeout vote");
 		this.createAndSendTimeoutVote(update.getInserted());
 	}
 
