@@ -72,7 +72,7 @@ public final class BFTEventPreprocessor implements BFTEventProcessor {
 	@Override
 	public void processViewUpdate(ViewUpdate viewUpdate) {
 		final View previousView = this.latestViewUpdate.getCurrentView();
-		log.trace("Processing viewUpdate {} cur {}", viewUpdate, previousView);
+		log.info("Processing viewUpdate {} cur {}", viewUpdate, previousView);
 
 		// FIXME: Check is required for now since Deterministic tests can randomize local messages
 		if (viewUpdate.getCurrentView().gt(previousView)) {
@@ -82,16 +82,20 @@ public final class BFTEventPreprocessor implements BFTEventProcessor {
 					.forEach(this::processViewCachedEvent);
 			viewQueues.keySet().removeIf(v -> v.lte(viewUpdate.getCurrentView()));
 
-			syncingEvents.removeIf(e -> e.getView().lt(viewUpdate.getCurrentView()));
+			syncingEvents.stream()
+				.filter(e -> e.getView().equals(viewUpdate.getCurrentView()))
+				.forEach(this::processQueuedConsensusEvent);
+
+			syncingEvents.removeIf(e -> e.getView().lte(viewUpdate.getCurrentView()));
 		}
 	}
 
 	private void processViewCachedEvent(ConsensusEvent event) {
 		if (event instanceof Proposal) {
-			log.trace("Processing cached proposal {}", event);
+			log.info("Processing cached proposal {}", event);
 			processProposal((Proposal) event);
 		} else if (event instanceof Vote) {
-			log.trace("Processing cached vote {}", event);
+			log.info("Processing cached vote {}", event);
 			processVote((Vote) event);
 		} else {
 			log.error("Ignoring cached ConsensusEvent {}", event);
@@ -101,7 +105,7 @@ public final class BFTEventPreprocessor implements BFTEventProcessor {
 	@Override
 	public void processBFTUpdate(BFTInsertUpdate update) {
 		HashCode vertexId = update.getInserted().getId();
-		log.trace("LOCAL_SYNC: {}", vertexId);
+		log.info("LOCAL_SYNC: {}", vertexId);
 
 		syncingEvents.stream()
 			.filter(e -> e.highQC().highestQC().getProposed().getVertexId().equals(vertexId))
@@ -126,18 +130,18 @@ public final class BFTEventPreprocessor implements BFTEventProcessor {
 
 	@Override
 	public void processVote(Vote vote) {
-		log.trace("Vote: PreProcessing {}", vote);
+		log.info("Vote: PreProcessing {}", vote);
 		if (!processVoteInternal(vote)) {
-			log.debug("Vote: Queuing {}, waiting for Sync", vote);
+			log.info("Vote: Queuing {}, waiting for Sync", vote);
 			syncingEvents.add(vote);
 		}
 	}
 
 	@Override
 	public void processProposal(Proposal proposal) {
-		log.trace("Proposal: PreProcessing {}", proposal);
+		log.info("Proposal: PreProcessing {}", proposal);
 		if (!processProposalInternal(proposal)) {
-			log.debug("Proposal: Queuing {}, waiting for Sync", proposal);
+			log.info("Proposal: Queuing {}, waiting for Sync", proposal);
 			syncingEvents.add(proposal);
 		}
 	}
@@ -157,6 +161,8 @@ public final class BFTEventPreprocessor implements BFTEventProcessor {
 			return false;
 		}
 
+		log.info("Processing queued consensus event: {}", event);
+
 		// Explicitly using switch case method here rather than functional method
 		// to process these events due to much better performance
 		if (event instanceof Proposal) {
@@ -175,14 +181,14 @@ public final class BFTEventPreprocessor implements BFTEventProcessor {
 	private boolean processVoteInternal(Vote vote) {
 		final View currentView = this.latestViewUpdate.getCurrentView();
 		if (vote.getView().gte(currentView)) {
-			log.trace("Vote: PreProcessing {}", vote);
+			log.info("Vote: PreProcessing {}", vote);
 			return syncUp(
 				vote.highQC(),
 				vote.getAuthor(),
 				() -> processOnCurrentViewOrCache(vote, forwardTo::processVote)
 			);
 		} else {
-			log.trace("Vote: Ignoring for past view {}, current view is {}", vote, currentView);
+			log.info("Vote: Ignoring for past view {}, current view is {}", vote, currentView);
 			return true;
 		}
 	}
@@ -190,14 +196,14 @@ public final class BFTEventPreprocessor implements BFTEventProcessor {
 	private boolean processProposalInternal(Proposal proposal) {
 		final View currentView = this.latestViewUpdate.getCurrentView();
 		if (proposal.getView().gte(currentView)) {
-			log.trace("Proposal: PreProcessing {}", proposal);
+			log.info("Proposal: PreProcessing {}", proposal);
 			return syncUp(
 				proposal.highQC(),
 				proposal.getAuthor(),
 				() -> processOnCurrentViewOrCache(proposal, forwardTo::processProposal)
 			);
 		} else {
-			log.trace("Proposal: Ignoring for past view {}, current view is {}", proposal, currentView);
+			log.info("Proposal: Ignoring for past view {}, current view is {}", proposal, currentView);
 			return true;
 		}
 	}
@@ -206,11 +212,11 @@ public final class BFTEventPreprocessor implements BFTEventProcessor {
 		if (latestViewUpdate.getCurrentView().equals(event.getView())) {
 			processFn.accept(event);
 		} else if (latestViewUpdate.getCurrentView().lt(event.getView())) {
-			log.trace("Caching {}, current view is {}", event, latestViewUpdate.getCurrentView());
+			log.info("Caching {}, current view is {}", event, latestViewUpdate.getCurrentView());
 			viewQueues.putIfAbsent(event.getView(), new LinkedList<>());
 			viewQueues.get(event.getView()).add(event);
 		} else {
-			log.debug("Ignoring {} for past view", event);
+			log.info("Ignoring {} for past view", event);
 		}
 	}
 
