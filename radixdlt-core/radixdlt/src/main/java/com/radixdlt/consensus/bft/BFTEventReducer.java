@@ -188,6 +188,7 @@ public final class BFTEventReducer implements BFTEventProcessor {
 			log.info("Vote has been rejected because of: {}",
 				((VoteProcessingResult.VoteRejected) result).getReason());
 		} else if (result instanceof VoteProcessingResult.QuorumReached) {
+			log.info("Vote result: quorum reached " + ((VoteProcessingResult.QuorumReached) result).getViewVotingResult());
 			this.hasReachedQuorum = true;
 			final ViewVotingResult viewResult =
 				((VoteProcessingResult.QuorumReached) result).getViewVotingResult();
