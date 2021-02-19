@@ -216,9 +216,16 @@ public class AddressBookImpl implements AddressBook {
 
 	// Needs peersLock held
 	private PeerWithSystem getPeerByTransportInfo(TransportInfo transportInfo) {
+		log.info("Trying to get peer by source {}", transportInfo);
+		log.info("Current sources = {}", this.peersBySource.keySet());
 		PeerWithSystem peer = this.peersBySource.get(transportInfo);
 		if (peer == null) {
+			log.info("Didn't find peer by source, trying by info");
+			log.info("Current infos = {}", this.peersByInfo.keySet());
 			peer = this.peersByInfo.get(transportInfo);
+			if (peer == null) {
+				log.info("Didn't find peer neither by source nor by info");
+			}
 		}
 		return peer;
 	}
