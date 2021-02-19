@@ -96,6 +96,7 @@ class MessagePreprocessor {
 		final boolean isBanned = peer.map(Peer::isBanned).orElse(false);
 		if (isBanned || currentTime - message.getTimestamp() > messageTtlMs) {
 			this.counters.increment(CounterType.MESSAGES_INBOUND_DISCARDED);
+			log.info("Peer is banned, ignoring msg");
 			return Optional.empty();
 		}
 
@@ -106,9 +107,11 @@ class MessagePreprocessor {
 					return Optional.empty();
 				}
 			} else if (message instanceof SignedMessage && !handleSignedMessage(peer, (SignedMessage) message)) {
+				log.info("Can't handle signed message!");
 				return Optional.empty();
 			}
 		} catch (Exception ex) {
+			log.info("Preprocessing failed, ex: " + ex.getMessage());
 			String msg = String.format("%s: Pre-processing from %s failed", message.getClass().getSimpleName(), source);
 			log.error(msg, ex);
 			return Optional.empty();
@@ -118,6 +121,7 @@ class MessagePreprocessor {
 			log.trace("Received from {}: {}", hostId(peer), message);
 		}
 
+		log.info("About to return a pair that contains peer: {}", peer);
 		return peer.map(p -> Pair.of(p, message));
 	}
 
@@ -173,7 +177,10 @@ class MessagePreprocessor {
 			}
 			log.trace("Good signature on {} message from {}", messageType, peer);
 			return true;
-		}).orElse(false);
+		}).orElseGet(() -> {
+			log.info("NO PEER: handle signed message peer does not exist so cannot verfify signature!");
+			return false;
+		});
 	}
 
 	private boolean checkSignature(SignedMessage message, RadixSystem system) {
