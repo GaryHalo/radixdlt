@@ -26,8 +26,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import com.radixdlt.counters.SystemCounters;
 import com.radixdlt.network.messaging.InboundMessage;
+import com.radixdlt.utils.streams.RoundRobinBackpressuredProcessor;
 import io.reactivex.rxjava3.core.Flowable;
-import io.reactivex.rxjava3.processors.PublishProcessor;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -83,7 +83,8 @@ final class NettyUDPTransportImpl implements Transport {
 	private TransportOutboundConnection outbound;
 	private TransportControl control;
 
-	private final PublishProcessor<Flowable<InboundMessage>> channels = PublishProcessor.create();
+	private final RoundRobinBackpressuredProcessor<InboundMessage> inboundMessageSink =
+		new RoundRobinBackpressuredProcessor<>();
 
 	@Inject
 	NettyUDPTransportImpl(
@@ -158,7 +159,7 @@ final class NettyUDPTransportImpl implements Transport {
 				@Override
 				public void initChannel(NioDatagramChannel ch) {
 					final var messageHandler = new UDPNettyMessageHandler(counters, messageBufferSize, natHandler);
-					channels.onNext(messageHandler.inboundMessageRx());
+					inboundMessageSink.subscribeTo(messageHandler.inboundMessageRx());
 
 					ch.config()
 						.setReceiveBufferSize(RCV_BUF_SIZE)
@@ -187,7 +188,7 @@ final class NettyUDPTransportImpl implements Transport {
 	    	throw new UncheckedIOException("Error while opening channel", e);
 		}
 
-	    return Flowable.mergeDelayError(channels);
+		return Flowable.fromPublisher(inboundMessageSink);
 	}
 
 	@Override
