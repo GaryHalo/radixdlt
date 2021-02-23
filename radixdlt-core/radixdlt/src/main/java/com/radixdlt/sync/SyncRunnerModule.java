@@ -34,6 +34,7 @@ import com.radixdlt.epochs.EpochsLedgerUpdate;
 import com.radixdlt.sync.messages.local.LocalSyncRequest;
 import com.radixdlt.sync.messages.local.SyncCheckReceiveStatusTimeout;
 import com.radixdlt.sync.messages.local.SyncCheckTrigger;
+import com.radixdlt.sync.messages.local.SyncLedgerUpdateTimeout;
 import com.radixdlt.sync.messages.local.SyncRequestTimeout;
 import com.radixdlt.sync.messages.remote.StatusRequest;
 import com.radixdlt.sync.messages.remote.StatusResponse;
@@ -67,8 +68,8 @@ public class SyncRunnerModule extends AbstractModule {
 		EventProcessor<SyncRequestTimeout> syncRequestTimeoutProcessor,
 		Observable<SyncCheckReceiveStatusTimeout> syncCheckReceiveStatusTimeouts,
 		EventProcessor<SyncCheckReceiveStatusTimeout> syncCheckReceiveStatusTimeoutProcessor,
-		Observable<SyncCheckReceiveStatusTimeout> syncLedgerUpdateTimeouts,
-		EventProcessor<SyncCheckReceiveStatusTimeout> syncLedgerUpdateTimeoutProcessor,
+		Observable<SyncLedgerUpdateTimeout> syncLedgerUpdateTimeouts,
+		EventProcessor<SyncLedgerUpdateTimeout> syncLedgerUpdateTimeoutProcessor,
 		Observable<EpochsLedgerUpdate> ledgerUpdates,
 		@ProcessWithSyncRunner Set<EventProcessor<EpochsLedgerUpdate>> ledgerUpdateProcessors,
 		Flowable<RemoteEvent<StatusRequest>> remoteStatusRequests,
