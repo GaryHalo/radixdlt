@@ -28,6 +28,7 @@ import com.radixdlt.atommodel.tokens.TokDefParticleFactory;
 import com.radixdlt.atommodel.tokens.TokenDefinitionUtils;
 import com.radixdlt.atommodel.tokens.TokenPermission;
 import com.radixdlt.atommodel.tokens.TransferrableTokensParticle;
+import com.radixdlt.constraintmachine.Particle;
 import com.radixdlt.constraintmachine.Spin;
 import com.radixdlt.identifiers.RRI;
 import com.radixdlt.identifiers.RadixAddress;
@@ -35,6 +36,8 @@ import com.radixdlt.middleware.ParticleGroup;
 import com.radixdlt.utils.UInt256;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Objects;
@@ -141,8 +144,10 @@ public final class InMemoryWallet {
 		return Optional.of(atom);
 	}
 
-	public Set<Atom> createParallelTransactions(RadixAddress to, int max) {
-		Stream<Optional<Atom>> atoms = particles.stream()
+	public List<Atom> createParallelTransactions(RadixAddress to, int max) {
+		List<TransferrableTokensParticle> shuffledParticles = new ArrayList<>(particles);
+		Collections.shuffle(shuffledParticles);
+		Stream<Optional<Atom>> atoms = shuffledParticles.stream()
 			.filter(t -> t.getAmount().compareTo(fee.multiply(UInt256.TWO)) > 0)
 			.map(t -> {
 				var mutableList = new LinkedList<TransferrableTokensParticle>();
@@ -151,7 +156,7 @@ public final class InMemoryWallet {
 				return createTransaction(mutableList, to, amount.isZero() ? UInt256.ONE : amount);
 			});
 
-		List<TransferrableTokensParticle> dust = particles.stream().filter(t -> t.getAmount().compareTo(fee.multiply(UInt256.TWO)) <= 0)
+		List<TransferrableTokensParticle> dust = shuffledParticles.stream().filter(t -> t.getAmount().compareTo(fee.multiply(UInt256.TWO)) <= 0)
 			.collect(Collectors.toList());
 
 		Stream<Optional<Atom>> dustAtoms = Streams.stream(Iterables.partition(dust, 3))
@@ -167,7 +172,7 @@ public final class InMemoryWallet {
 			.filter(Optional::isPresent)
 			.map(Optional::get)
 			.limit(max)
-			.collect(Collectors.toSet());
+			.collect(Collectors.toList());
 	}
 
 	public InMemoryWallet addParticle(TransferrableTokensParticle p) {
