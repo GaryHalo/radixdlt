@@ -139,7 +139,7 @@ public final class MempoolFiller {
 				//}
 			});
 
-			mempoolFillDispatcher.dispatch(ScheduledMempoolFill.create(), 100);
+			mempoolFillDispatcher.dispatch(ScheduledMempoolFill.create(), 500);
 		};
 	}
 }
