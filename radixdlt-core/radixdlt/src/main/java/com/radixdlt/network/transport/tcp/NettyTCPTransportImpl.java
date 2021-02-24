@@ -211,7 +211,10 @@ final class NettyTCPTransportImpl implements NettyTCPTransport {
 				() -> log.error("TCP channels buffer overflow!"),
 				BackpressureOverflowStrategy.DROP_LATEST
 			)
-			.compose(FlowableTransformers.flatMapAsync(v -> v, Schedulers.single(), false));
+			.compose(FlowableTransformers.flatMapAsync(v -> {
+				log.info("Processing tcp flowable channel");
+				return v;
+			}, Schedulers.single(), false));
 	}
 
 	private void setupChannel(SocketChannel ch, boolean isOutbound, int rcvBufSize, int sndBufSize) {
