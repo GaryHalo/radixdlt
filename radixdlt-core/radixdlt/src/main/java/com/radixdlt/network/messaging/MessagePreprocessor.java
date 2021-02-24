@@ -81,7 +81,9 @@ class MessagePreprocessor {
 		final byte[] messageBytes = inboundMessage.message();
 		this.counters.add(CounterType.NETWORKING_RECEIVED_BYTES, messageBytes.length);
 		final Message message = deserialize(messageBytes);
-		return processMessage(inboundMessage.source(), message);
+		final var res = processMessage(inboundMessage.source(), message);
+		log.info("Preprocessing inbound message, the result is {}", res);
+		return res;
 	}
 
 	Optional<Pair<Peer, Message>> processMessage(TransportInfo source, Message message) {
