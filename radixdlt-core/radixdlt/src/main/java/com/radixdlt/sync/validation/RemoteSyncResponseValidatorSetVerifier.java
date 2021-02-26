@@ -19,6 +19,8 @@ package com.radixdlt.sync.validation;
 
 import com.radixdlt.consensus.bft.BFTValidatorSet;
 import com.radixdlt.sync.messages.remote.SyncResponse;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.Objects;
 
@@ -28,6 +30,8 @@ import java.util.Objects;
  */
 public class RemoteSyncResponseValidatorSetVerifier {
 
+	private static final Logger log = LogManager.getLogger();
+
 	private final BFTValidatorSet validatorSet;
 
 	public RemoteSyncResponseValidatorSetVerifier(BFTValidatorSet validatorSet) {
@@ -36,6 +40,8 @@ public class RemoteSyncResponseValidatorSetVerifier {
 
 	public boolean verifyValidatorSet(SyncResponse syncResponse) {
 		final var dtoCommandsAndProof = syncResponse.getCommandsAndProof();
+		log.info("verify validator set, validator set = {}", validatorSet);
+		
 		final var validationState = validatorSet.newValidationState();
 
 		dtoCommandsAndProof.getTail().getSignatures().getSignatures().forEach((node, signature) ->
