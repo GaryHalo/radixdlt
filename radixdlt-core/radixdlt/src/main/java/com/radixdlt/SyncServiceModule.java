@@ -23,7 +23,6 @@ import com.google.inject.Scopes;
 import com.google.inject.Singleton;
 import com.google.inject.multibindings.ProvidesIntoSet;
 import com.radixdlt.consensus.BFTConfiguration;
-import com.radixdlt.consensus.GenesisValidatorSetProvider;
 import com.radixdlt.consensus.HashVerifier;
 import com.radixdlt.consensus.VerifiedLedgerHeaderAndProof;
 import com.radixdlt.counters.SystemCounters;
@@ -146,10 +145,7 @@ public class SyncServiceModule extends AbstractModule {
 	}
 
 	@Provides
-	private RemoteSyncResponseValidatorSetVerifier validatorSetVerifier(BFTConfiguration initialConfiguration,
-																		GenesisValidatorSetProvider gen) {
-		System.out.println("Initial bft set=" + initialConfiguration.getValidatorSet());
-		System.out.println("Validator set from genesis=" + gen.genesisValidatorSet());
+	private RemoteSyncResponseValidatorSetVerifier validatorSetVerifier(BFTConfiguration initialConfiguration) {
 		return new RemoteSyncResponseValidatorSetVerifier(initialConfiguration.getValidatorSet());
 	}
 
