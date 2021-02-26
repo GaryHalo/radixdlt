@@ -21,6 +21,9 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.hash.HashCode;
 import com.google.inject.Inject;
 import com.radixdlt.crypto.Hasher;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Function;
@@ -31,6 +34,9 @@ import javax.annotation.concurrent.ThreadSafe;
  */
 @ThreadSafe
 public class SimpleLedgerAccumulatorAndVerifier implements LedgerAccumulator, LedgerAccumulatorVerifier {
+
+	private static final Logger log = LogManager.getLogger();
+
 	private final Hasher hasher;
 
 	@Inject
@@ -53,9 +59,12 @@ public class SimpleLedgerAccumulatorAndVerifier implements LedgerAccumulator, Le
 	@Override
 	public boolean verify(AccumulatorState start, ImmutableList<HashCode> hashes, AccumulatorState end) {
 		AccumulatorState accumulatorState = start;
+		log.info("Verify initial state = {}", start);
 		for (HashCode hash : hashes) {
 			accumulatorState = this.accumulate(accumulatorState, hash);
+			log.info("Accumulate hash {}, new state = {}", hash, accumulatorState);
 		}
+		log.info("calculated={}, end ={}, equals?={}", accumulatorState, end, Objects.equals(accumulatorState, end));
 		return Objects.equals(accumulatorState, end);
 	}
 
@@ -66,6 +75,8 @@ public class SimpleLedgerAccumulatorAndVerifier implements LedgerAccumulator, Le
 		Function<T, HashCode> hashCodeMapper,
 		AccumulatorState tail
 	) {
+		log.info("verifyAndGetExtension");
+
 		if (tail.getStateVersion() < current.getStateVersion()) {
 			throw new IllegalArgumentException(String.format("Tail %s is has lower state version than current %s", tail, current));
 		}
@@ -73,10 +84,13 @@ public class SimpleLedgerAccumulatorAndVerifier implements LedgerAccumulator, Le
 		final long firstVersion = tail.getStateVersion() - commands.size() + 1;
 		if (current.getStateVersion() + 1 < firstVersion) {
 			// Missing versions
+			log.info("missing versions");
 			return Optional.empty();
 		}
 
 		if (commands.isEmpty()) {
+			log.info("empty commands  Objects.equals(current, tail)?= {}", Objects.equals(current, tail));
+
 			return Objects.equals(current, tail) ? Optional.of(ImmutableList.of()) : Optional.empty();
 		}
 
@@ -84,6 +98,7 @@ public class SimpleLedgerAccumulatorAndVerifier implements LedgerAccumulator, Le
 		final ImmutableList<T> extension = commands.subList(startIndex, commands.size());
 		final ImmutableList<HashCode> hashes = extension.stream().map(hashCodeMapper::apply).collect(ImmutableList.toImmutableList());
 		if (!verify(current, hashes, tail)) {
+			log.info("Does not extend");
 			// Does not extend
 			return Optional.empty();
 		}
