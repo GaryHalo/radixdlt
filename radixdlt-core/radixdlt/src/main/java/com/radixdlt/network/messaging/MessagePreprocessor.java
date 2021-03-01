@@ -82,7 +82,6 @@ class MessagePreprocessor {
 		this.counters.add(CounterType.NETWORKING_RECEIVED_BYTES, messageBytes.length);
 		final Message message = deserialize(messageBytes);
 		final var res = processMessage(inboundMessage.source(), message);
-		log.info("Preprocessing inbound message, the result is {}", res);
 		return res;
 	}
 

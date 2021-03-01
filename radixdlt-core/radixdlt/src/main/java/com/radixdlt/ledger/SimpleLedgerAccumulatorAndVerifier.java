@@ -59,13 +59,12 @@ public class SimpleLedgerAccumulatorAndVerifier implements LedgerAccumulator, Le
 	@Override
 	public boolean verify(AccumulatorState start, ImmutableList<HashCode> hashes, AccumulatorState end) {
 		AccumulatorState accumulatorState = start;
-		log.info("Verify initial state = {}", start);
 		for (HashCode hash : hashes) {
 			accumulatorState = this.accumulate(accumulatorState, hash);
-			log.info("Accumulate hash {}, new state = {}", hash, accumulatorState);
 		}
-		log.info("calculated={}, end ={}, equals?={}", accumulatorState, end, Objects.equals(accumulatorState, end));
-		return Objects.equals(accumulatorState, end);
+		final var res = Objects.equals(accumulatorState, end);
+		log.info("Verify initial state = {}, calculated={}, end ={}, equals?={}", start, accumulatorState, end, res);
+		return res;
 	}
 
 	@Override
