@@ -243,23 +243,25 @@ public final class CommittedAtomsStore implements EngineStore<CommittedAtom>, Co
 				stateVersion,
 				storedCommittedCommands.get(0).getStateAndProof().getAccumulatorState().getStateVersion());
 
+
 		// Limit the batch to within a single epoch
-		final int tailPosition;
-		if (cmdIsEndOfEpoch(storedCommittedCommands.get(0))) {
-			// Send this by itself
-			log.info("first cmd is end of epoch, setting tailPosition = 0");
-			tailPosition = 0;
-		} else {
-			final var epochChangeIndex = Iterables.indexOf(storedCommittedCommands, this::cmdIsEndOfEpoch);
-			log.info("first cmd is not end of epoch, epoch change index = " + epochChangeIndex);
-			tailPosition = epochChangeIndex < 0 ? storedCommittedCommands.size() - 1 : epochChangeIndex;
+		// TODO: Cleanup and move logic into lower layer
+		int epochChangeIndex = -1;
+		for (int i = 0; i < storedCommittedCommands.size(); i++) {
+			var cmd = storedCommittedCommands.get(i);
+			if (cmd.getStateAndProof().getRaw().isEndOfEpoch()
+					&& cmd.getStateAndProof().getStateVersion() == stateVersion + i) {
+				epochChangeIndex = i;
+				break;
+			}
 		}
-		log.info("Tail position = {}", tailPosition);
+
+		final int tailPosition = epochChangeIndex < 0 ? storedCommittedCommands.size() - 1 : epochChangeIndex;
 		final var nextHeader = storedCommittedCommands.get(tailPosition).getStateAndProof();
 		final var commands = storedCommittedCommands.stream()
-			.limit(tailPosition + 1L)
-			.map(StoredCommittedCommand::getCommand)
-			.collect(ImmutableList.toImmutableList());
+				.limit(tailPosition + 1L)
+				.map(StoredCommittedCommand::getCommand)
+				.collect(ImmutableList.toImmutableList());
 		log.info("start state version = {} , tail state ver = {}, should get {} commands, got {} commands",
 				stateVersion, nextHeader.getAccumulatorState().getStateVersion(),
 				nextHeader.getAccumulatorState().getStateVersion() - stateVersion,
