@@ -54,12 +54,16 @@ import com.radixdlt.store.NextCommittedLimitReachedException;
 import com.radixdlt.sync.CommittedReader;
 import com.radixdlt.utils.Longs;
 import com.radixdlt.store.Transaction;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.Objects;
 import java.util.function.BiFunction;
 import java.util.Optional;
 
 public final class CommittedAtomsStore implements EngineStore<CommittedAtom>, CommittedReader, RadixEngineAtomicCommitManager {
+	private static final Logger log = LogManager.getLogger();
+
 	private final Serialization serialization;
 	private final AtomIndexer atomIndexer;
 	private final LedgerEntryStore store;
@@ -233,20 +237,34 @@ public final class CommittedAtomsStore implements EngineStore<CommittedAtom>, Co
 			return null;
 		}
 
+		log.info("[remote-sync] getNextCommittedCommands, got {} stored committed commands, request state version = {}," +
+						"next state version = {} (should be +1)",
+				storedCommittedCommands.size(),
+				stateVersion,
+				storedCommittedCommands.get(0).getStateAndProof().getAccumulatorState().getStateVersion());
+
 		// Limit the batch to within a single epoch
 		final int tailPosition;
 		if (cmdIsEndOfEpoch(storedCommittedCommands.get(0))) {
 			// Send this by itself
+			log.info("first cmd is end of epoch, setting tailPosition = 0");
 			tailPosition = 0;
 		} else {
 			final var epochChangeIndex = Iterables.indexOf(storedCommittedCommands, this::cmdIsEndOfEpoch);
+			log.info("first cmd is not end of epoch, epoch change index = " + epochChangeIndex);
 			tailPosition = epochChangeIndex < 0 ? storedCommittedCommands.size() - 1 : epochChangeIndex;
 		}
+		log.info("Tail position = {}", tailPosition);
 		final var nextHeader = storedCommittedCommands.get(tailPosition).getStateAndProof();
 		final var commands = storedCommittedCommands.stream()
 			.limit(tailPosition + 1L)
 			.map(StoredCommittedCommand::getCommand)
 			.collect(ImmutableList.toImmutableList());
+		log.info("start state version = {} , tail state ver = {}, should get {} commands, got {} commands",
+				stateVersion, nextHeader.getAccumulatorState().getStateVersion(),
+				nextHeader.getAccumulatorState().getStateVersion() - stateVersion,
+				commands.size());
+
 		return new VerifiedCommandsAndProof(commands, nextHeader);
 	}
 
@@ -269,6 +287,8 @@ public final class CommittedAtomsStore implements EngineStore<CommittedAtom>, Co
 	}
 
 	private boolean cmdIsEndOfEpoch(StoredCommittedCommand cmd) {
-		return cmd.getStateAndProof().getRaw().isEndOfEpoch();
+		final var res = cmd.getStateAndProof().getRaw().isEndOfEpoch();
+		log.info("checking cmd accum= {} is end of epoch? {}", cmd.getStateAndProof().getAccumulatorState().getStateVersion(), res);
+		return res;
 	}
 }
