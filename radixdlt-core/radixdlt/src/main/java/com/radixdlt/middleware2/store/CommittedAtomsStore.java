@@ -249,8 +249,9 @@ public final class CommittedAtomsStore implements EngineStore<CommittedAtom>, Co
 		int epochChangeIndex = -1;
 		for (int i = 0; i < storedCommittedCommands.size(); i++) {
 			var cmd = storedCommittedCommands.get(i);
+			var cmdVersion = stateVersion + i + 1;
 			if (cmd.getStateAndProof().getRaw().isEndOfEpoch()
-					&& cmd.getStateAndProof().getStateVersion() == stateVersion + i) {
+					&& cmd.getStateAndProof().getStateVersion() == cmdVersion) {
 				epochChangeIndex = i;
 				break;
 			}
@@ -258,14 +259,17 @@ public final class CommittedAtomsStore implements EngineStore<CommittedAtom>, Co
 
 		final int tailPosition = epochChangeIndex < 0 ? storedCommittedCommands.size() - 1 : epochChangeIndex;
 		final var nextHeader = storedCommittedCommands.get(tailPosition).getStateAndProof();
+
 		final var commands = storedCommittedCommands.stream()
 				.limit(tailPosition + 1L)
 				.map(StoredCommittedCommand::getCommand)
 				.collect(ImmutableList.toImmutableList());
+
 		log.info("start state version = {} , tail state ver = {}, should get {} commands, got {} commands",
 				stateVersion, nextHeader.getAccumulatorState().getStateVersion(),
 				nextHeader.getAccumulatorState().getStateVersion() - stateVersion,
 				commands.size());
+
 
 		return new VerifiedCommandsAndProof(commands, nextHeader);
 	}
