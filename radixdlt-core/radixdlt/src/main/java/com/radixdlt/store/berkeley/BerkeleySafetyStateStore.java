@@ -70,7 +70,7 @@ public final class BerkeleySafetyStateStore implements PersistentSafetyStateStor
 		this.serialization = Objects.requireNonNull(serialization);
 
 		this.safetyStore = this.open();
-			this.systemCounters = Objects.requireNonNull(systemCounters);
+		this.systemCounters = Objects.requireNonNull(systemCounters);
 
 		if (Boolean.valueOf(System.getProperty("db.check_integrity", "true"))) {
 			// TODO implement integrity check
@@ -88,6 +88,7 @@ public final class BerkeleySafetyStateStore implements PersistentSafetyStateStor
 	}
 
 	private Database open() {
+		logger.info("Safety state store open");
 		DatabaseConfig primaryConfig = new DatabaseConfig();
 		primaryConfig.setAllowCreate(true);
 		primaryConfig.setTransactional(true);
@@ -97,7 +98,9 @@ public final class BerkeleySafetyStateStore implements PersistentSafetyStateStor
 			// resource is not changed here, the resource is just accessed.
 			@SuppressWarnings("resource")
 			Environment env = this.dbEnv.getEnvironment();
-			return env.openDatabase(null, SAFETY_STORE_NAME, primaryConfig);
+			final var res = env.openDatabase(null, SAFETY_STORE_NAME, primaryConfig);
+			logger.info("Safety store db opened");
+			return res;
 		} catch (Exception e) {
 			throw new BerkeleyStoreException("Error while opening database", e);
 		}

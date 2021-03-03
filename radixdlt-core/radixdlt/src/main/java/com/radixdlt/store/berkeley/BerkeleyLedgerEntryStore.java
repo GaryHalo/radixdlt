@@ -296,6 +296,7 @@ public class BerkeleyLedgerEntryStore implements LedgerEntryStore, PersistentVer
 	}
 
 	private void open() {
+		log.info("Berkeley store open");
 		var primaryConfig = buildPrimaryConfig();
 		var uniqueIndicesConfig = buildUniqueIndicesConfig();
 		var duplicateIndicesConfig = buildDuplicatesConfig();
@@ -307,12 +308,18 @@ public class BerkeleyLedgerEntryStore implements LedgerEntryStore, PersistentVer
 			@SuppressWarnings("resource")
 			var env = dbEnv.getEnvironment();
 			atoms = env.openDatabase(null, ATOMS_DB_NAME, primaryConfig);
+			log.info("atoms opened");
 			uniqueIndices = env.openSecondaryDatabase(null, UNIQUE_INDICES_DB_NAME, atoms, uniqueIndicesConfig);
+			log.info("unique indices opened");
 			duplicatedIndices = env.openSecondaryDatabase(null, DUPLICATE_INDICES_DB_NAME, atoms, duplicateIndicesConfig);
+			log.info("duplicated indices opened");
 			atomIndices = env.openDatabase(null, ATOM_INDICES_DB_NAME, primaryConfig);
+			log.info("atoms indices opened");
 			pendingDatabase = env.openDatabase(null, PENDING_DB_NAME, pendingConfig);
+			log.info("pending database opened");
 
 			atomLog = SimpleAppendLog.openCompressed(new File(env.getHome(), ATOM_LOG).getAbsolutePath(), systemCounters);
+			log.info("atom log opened");
 		} catch (Exception e) {
 			throw new BerkeleyStoreException("Error while opening databases", e);
 		}
