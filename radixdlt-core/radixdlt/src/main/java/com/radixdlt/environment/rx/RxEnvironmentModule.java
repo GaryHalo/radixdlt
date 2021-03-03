@@ -76,6 +76,7 @@ import java.util.stream.Collectors;
  */
 public class RxEnvironmentModule extends AbstractModule {
 	private static final Logger logger = LogManager.getLogger();
+	private static final Logger log = LogManager.getLogger();
 
 	@Override
 	public void configure() {
@@ -178,15 +179,22 @@ public class RxEnvironmentModule extends AbstractModule {
 		Set<EventProcessorOnRunner<?>> processors,
 		RxEnvironment rxEnvironment
 	) {
+		log.info("Create chaos runner start");
 		Set<Class<?>> eventClasses = processors.stream()
 				.filter(p -> p.getRunnerName().equals("chaos"))
 				.map(EventProcessorOnRunner::getEventClass)
 				.collect(Collectors.toSet());
+		log.info("Create chaos runner got event classes");
 
 		ModuleRunnerImpl.Builder builder = ModuleRunnerImpl.builder();
 		for (Class<?> eventClass : eventClasses) {
-			processors.forEach(p -> addToBuilder(eventClass, rxEnvironment, p, builder));
+			processors.forEach(p -> {
+				log.info("Create chaos runner add to builder");
+				addToBuilder(eventClass, rxEnvironment, p, builder);
+				log.info("Create chaos runner add to builder DONE");
+			});
 		}
+		log.info("Create chaos runner finished");
 
 		return builder.build("ChaosRunner " + self);
 	}
@@ -201,24 +209,36 @@ public class RxEnvironmentModule extends AbstractModule {
 		Set<RemoteEventProcessorOnRunner<?>> remoteProcessors,
 		RxRemoteEnvironment rxRemoteEnvironment
 	) {
+		log.info("Create mempool runner start");
 		ModuleRunnerImpl.Builder builder = ModuleRunnerImpl.builder();
 
 		Set<Class<?>> remoteEventClasses = remoteProcessors.stream()
 			.filter(p -> p.getRunnerName().equals("mempool"))
 			.map(RemoteEventProcessorOnRunner::getEventClass)
 			.collect(Collectors.toSet());
+		log.info("Create mempool runner got remote event classes");
+
 		for (Class<?> eventClass : remoteEventClasses) {
-			remoteProcessors.forEach(p -> addToBuilder(eventClass, rxRemoteEnvironment, p, builder));
+			remoteProcessors.forEach(p -> {
+				log.info("Create mempool runner add remote to builder");
+				addToBuilder(eventClass, rxRemoteEnvironment, p, builder);
+			});
 		}
 
 		Set<Class<?>> eventClasses = processors.stream()
 				.filter(p -> p.getRunnerName().equals("mempool"))
 				.map(EventProcessorOnRunner::getEventClass)
 				.collect(Collectors.toSet());
+		log.info("Create mempool runner got event classes");
+
 		for (Class<?> eventClass : eventClasses) {
-			processors.forEach(p -> addToBuilder(eventClass, rxEnvironment, p, builder));
+			processors.forEach(p -> {
+				log.info("Create mempool runner add to builder");
+				addToBuilder(eventClass, rxEnvironment, p, builder);
+			});
 		}
 
+		log.info("Create mempool runner done");
 		return builder.build("MempoolRunner " + self);
 	}
 }
