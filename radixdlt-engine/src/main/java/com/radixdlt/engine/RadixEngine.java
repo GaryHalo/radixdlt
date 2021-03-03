@@ -33,6 +33,9 @@ import com.radixdlt.store.EngineStore;
 import com.radixdlt.store.SpinStateMachine;
 
 import com.radixdlt.store.TransientEngineStore;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -120,6 +123,7 @@ public final class RadixEngine<T extends RadixEngineAtom> {
 		this.engineStore = Objects.requireNonNull(engineStore);
 		this.checker = checker;
 	}
+	private static final Logger log = LogManager.getLogger();
 
 	/**
 	 * Add a deterministic computation engine which maps an ordered list of
@@ -140,7 +144,9 @@ public final class RadixEngine<T extends RadixEngineAtom> {
 		);
 
 		synchronized (stateUpdateEngineLock) {
+			log.info("about to initialize state computer (in addStateReducer)");
 			applicationStateComputer.initialize(this.engineStore);
+			log.info("iniitialized state computer (in addStateReducer)");
 			stateComputers.put(stateReducer.stateClass(), applicationStateComputer);
 		}
 	}

@@ -53,6 +53,8 @@ import com.radixdlt.store.LedgerEntryStore;
 
 import java.util.function.Consumer;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -208,7 +210,10 @@ public class AtomsService {
 		return this.atomEventObservers.stream().map(AtomEventObserver::isDone).filter(done -> !done).count();
 	}
 
+	public static final Logger log = LogManager.getLogger();
+
 	public Optional<JSONObject> getAtomsByAtomId(AID atomId) throws JSONException {
+		log.info("get atom in atoms service");
 		return store.get(atomId)
 			.map(LedgerEntry::getContent)
 			.map(commandToBinaryConverter::toCommand)

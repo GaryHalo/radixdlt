@@ -164,6 +164,7 @@ public class AtomEventObserver {
 				while (cursor != null && atoms.size() < BATCH_SIZE) {
 					AID aid = cursor.get();
 					processedAtomIds.add(aid);
+					log.info("get atom in observable");
 					Optional<LedgerEntry> ledgerEntry = store.get(aid);
 					ledgerEntry.ifPresent(
 						entry -> {

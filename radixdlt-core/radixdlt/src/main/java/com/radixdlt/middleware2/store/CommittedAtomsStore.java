@@ -53,6 +53,8 @@ import com.radixdlt.store.NextCommittedLimitReachedException;
 import com.radixdlt.sync.CommittedReader;
 import com.radixdlt.utils.Longs;
 import com.radixdlt.store.Transaction;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.Objects;
 import java.util.function.BiFunction;
@@ -165,6 +167,8 @@ public final class CommittedAtomsStore implements EngineStore<CommittedAtom>, Co
 		}
 	}
 
+	public static final Logger log = LogManager.getLogger();
+
 	@Override
 	public <U extends Particle, V> V compute(
 		Class<U> particleClass,
@@ -172,16 +176,19 @@ public final class CommittedAtomsStore implements EngineStore<CommittedAtom>, Co
 		BiFunction<V, U, V> outputReducer,
 		BiFunction<V, U, V> inputReducer
 	) {
+		log.info("committed atoms store compute");
 		final String idForClass = serialization.getIdForClass(particleClass);
 		final EUID numericClassId = SerializationUtils.stringToNumericID(idForClass);
 		final byte[] indexableBytes = EngineAtomIndices.toByteArray(IndexType.PARTICLE_CLASS, numericClassId);
 		final StoreIndex storeIndex = new StoreIndex(EngineAtomIndices.IndexType.PARTICLE_CLASS.getValue(), indexableBytes);
+
 		SearchCursor cursor = store.search(LedgerIndexType.DUPLICATE, storeIndex, LedgerSearchMode.EXACT);
 
 		V v = initial;
 		while (cursor != null) {
 			AID aid = cursor.get();
 			Optional<LedgerEntry> ledgerEntry = store.get(aid);
+			log.info("commited store compute got atom from cursor");
 			if (ledgerEntry.isPresent()) {
 				LedgerEntry entry = ledgerEntry.get();
 				StoredCommittedCommand committedCommand = commandToBinaryConverter.toCommand(entry.getContent());
@@ -199,10 +206,12 @@ public final class CommittedAtomsStore implements EngineStore<CommittedAtom>, Co
 			}
 			cursor = cursor.next();
 		}
+		log.info("committed atoms store compute DONE");
 		return v;
 	}
 
 	public Optional<VerifiedLedgerHeaderAndProof> getLastVerifiedHeader() {
+		log.info("get last verified header");
 		return store.getLastCommitted()
 			.flatMap(store::get)
 			.map(e -> commandToBinaryConverter.toCommand(e.getContent()).getProof());
@@ -216,6 +225,7 @@ public final class CommittedAtomsStore implements EngineStore<CommittedAtom>, Co
 			LedgerSearchMode.EXACT
 		);
 		if (cursor != null) {
+			log.info("get epoch verified header");
 			return store.get(cursor.get())
 				.map(e -> commandToBinaryConverter.toCommand(e.getContent()).getProof());
 		} else {

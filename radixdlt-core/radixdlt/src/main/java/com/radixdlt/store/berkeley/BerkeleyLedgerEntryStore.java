@@ -216,7 +216,6 @@ public class BerkeleyLedgerEntryStore implements LedgerEntryStore, PersistentVer
 
 	@Override
 	public Optional<LedgerEntry> get(AID aid) {
-		log.info("[debug] get atom by id");
 
 		return withTime(() -> {
 			try {
@@ -228,7 +227,6 @@ public class BerkeleyLedgerEntryStore implements LedgerEntryStore, PersistentVer
 
 					addBytesRead(value, key);
 					final var res = Optional.of(restoreLedgerEntry(value.getData()));
-					log.info("[debug] loadLastVertexStoreState get atom success");
 					return res;
 				}
 			} catch (Exception e) {
