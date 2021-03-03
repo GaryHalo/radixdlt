@@ -42,12 +42,16 @@ import com.radixdlt.sync.messages.remote.SyncResponse;
 import com.radixdlt.utils.ThreadFactories;
 import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.core.Observable;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.Set;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 public class SyncRunnerModule extends AbstractModule {
+
+	private static final Logger log = LogManager.getLogger();
 
 	@ProvidesIntoMap
 	@StringMapKey("sync")
@@ -76,10 +80,13 @@ public class SyncRunnerModule extends AbstractModule {
 		Flowable<RemoteEvent<SyncResponse>> remoteSyncResponses,
 		RemoteEventProcessor<SyncResponse> syncResponseProcessor
 	) {
+		log.info("Create sync module");
+
 		final var executor =
 			Executors.newSingleThreadScheduledExecutor(ThreadFactories.daemonThreads("Sync " + self));
+		log.info("Executor created");
 
-		return ModuleRunnerImpl.builder()
+		final var res =  ModuleRunnerImpl.builder()
 			.add(localSyncRequests, syncRequestEventProcessor)
 			.add(syncCheckTriggers, syncCheckTriggerProcessor)
 			.add(syncCheckReceiveStatusTimeouts, syncCheckReceiveStatusTimeoutProcessor)
@@ -91,12 +98,16 @@ public class SyncRunnerModule extends AbstractModule {
 			.add(remoteSyncRequests, remoteSyncRequestProcessor)
 			.add(remoteSyncResponses, syncResponseProcessor)
 			.onStart(() -> {
+				log.info("sync module on start");
+
 				executor.scheduleWithFixedDelay(
 					() -> syncCheckTriggerDispatcher.dispatch(SyncCheckTrigger.create()),
 					syncConfig.syncCheckInterval(),
 					syncConfig.syncCheckInterval(),
 					TimeUnit.MILLISECONDS
 				);
+				log.info("sync module on start finished");
+
 			})
 			.onStop(() -> {
 				try {
@@ -106,5 +117,8 @@ public class SyncRunnerModule extends AbstractModule {
 				}
 			})
 			.build("SyncManager " + self);
+		log.info("sync module created");
+
+		return res;
 	}
 }
