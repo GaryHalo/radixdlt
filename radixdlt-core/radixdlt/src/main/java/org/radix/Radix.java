@@ -141,32 +141,48 @@ public final class Radix {
 
 		// setup networking
 		final PeerManager peerManager = injector.getInstance(PeerManager.class);
+		log.info("got peer manager instance, starting");
 		peerManager.start();
+		log.info("started peer manager");
 
 		final SystemInfoRunner infoStateRunner = injector.getInstance(SystemInfoRunner.class);
+		log.info("got info state runner instance, starting");
 		infoStateRunner.start();
+		log.info("started info state runner");
 
 		final Map<String, ModuleRunner> moduleRunners = injector.getInstance(Key.get(new TypeLiteral<Map<String, ModuleRunner>>() { }));
+		log.info("got module runners");
 
 		final ModuleRunner syncRunner = moduleRunners.get("sync");
+		log.info("got sync runner, starting");
 		syncRunner.start();
+		log.info("started sync runner");
 
 		final ModuleRunner mempoolReceiverRunner = moduleRunners.get("mempool");
+		log.info("got mempool receiver runner");
 		mempoolReceiverRunner.start();
+		log.info("mempool receiver started");
 
 		final ModuleRunner chaosRunner = moduleRunners.get("chaos");
+		log.info("got chaos runner");
 		if (chaosRunner != null) {
+			log.info("chaos is not null, starting");
 			chaosRunner.start();
+			log.info("chaos started");
 		}
 
 		// start API services
 		final RadixHttpServer httpServer = injector.getInstance(RadixHttpServer.class);
+		log.info("got http server, starting");
 		httpServer.start();
+		log.info("http server started");
 
 		final BFTNode self = injector.getInstance(Key.get(BFTNode.class, Self.class));
 		if (properties.get("consensus.start_on_boot", true)) {
 			final ModuleRunner consensusRunner = moduleRunners.get("consensus");
+			log.info("got consensus runner");
 			consensusRunner.start();
+			log.info("starting consensus runner");
 			log.info("Node '{}' started successfully", self);
 		} else {
 			log.info("Node '{}' ready, waiting for start signal", self);
