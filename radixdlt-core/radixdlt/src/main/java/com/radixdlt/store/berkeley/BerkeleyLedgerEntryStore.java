@@ -158,6 +158,8 @@ public class BerkeleyLedgerEntryStore implements LedgerEntryStore, PersistentVer
 
 	@Override
 	public void reset() {
+		log.info("[debug] reset ");
+
 		dbEnv.withLock(() -> {
 			com.sleepycat.je.Transaction transaction = null;
 			try {
@@ -171,7 +173,10 @@ public class BerkeleyLedgerEntryStore implements LedgerEntryStore, PersistentVer
 				env.truncateDatabase(transaction, DUPLICATE_INDICES_DB_NAME, false);
 				env.truncateDatabase(transaction, ATOM_INDICES_DB_NAME, false);
 				env.truncateDatabase(transaction, PENDING_DB_NAME, false);
+				log.info("[debug] reset commit");
 				transaction.commit();
+				log.info("[debug] reset committed");
+
 			} catch (DatabaseNotFoundException e) {
 				if (transaction != null) {
 					transaction.abort();
@@ -211,6 +216,8 @@ public class BerkeleyLedgerEntryStore implements LedgerEntryStore, PersistentVer
 
 	@Override
 	public Optional<LedgerEntry> get(AID aid) {
+		log.info("[debug] get atom by id");
+
 		return withTime(() -> {
 			try {
 				var key = entry(from(ENTRY_INDEX_PREFIX, aid.getBytes()));
@@ -220,7 +227,9 @@ public class BerkeleyLedgerEntryStore implements LedgerEntryStore, PersistentVer
 					value.setData(atomLog.read(fromByteArray(value.getData())));
 
 					addBytesRead(value, key);
-					return Optional.of(restoreLedgerEntry(value.getData()));
+					final var res = Optional.of(restoreLedgerEntry(value.getData()));
+					log.info("[debug] loadLastVertexStoreState get atom success");
+					return res;
 				}
 			} catch (Exception e) {
 				fail("Get of atom '" + aid + "' failed", e);
@@ -257,20 +266,29 @@ public class BerkeleyLedgerEntryStore implements LedgerEntryStore, PersistentVer
 
 	@Override
 	public Optional<SerializedVertexStoreState> loadLastVertexStoreState() {
+		log.info("[debug] loadLastVertexStoreState");
 		return withTime(() -> {
 			try (var cursor = pendingDatabase.openCursor(null, null)) {
+				log.info("[debug] loadLastVertexStoreState open cursor");
+
 				var pKey = entry();
 				var value = entry();
+
 				var status = cursor.getLast(pKey, value, DEFAULT);
 
 				if (status == SUCCESS) {
+					log.info("[debug] loadLastVertexStoreState status success");
 					addBytesRead(value, pKey);
 					try {
-						return Optional.of(serialization.fromDson(value.getData(), SerializedVertexStoreState.class));
+						final var res = Optional.of(serialization.fromDson(value.getData(), SerializedVertexStoreState.class));
+						log.info("[debug] loadLastVertexStoreState got res");
+						return res;
+
 					} catch (DeserializeException e) {
 						throw new IllegalStateException(e);
 					}
 				} else {
+					log.info("[debug] loadLastVertexStoreState return empty");
 					return Optional.empty();
 				}
 			}
