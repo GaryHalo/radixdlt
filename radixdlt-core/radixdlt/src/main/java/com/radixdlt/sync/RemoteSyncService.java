@@ -80,7 +80,7 @@ public final class RemoteSyncService {
 
 	private void processSyncRequest(BFTNode sender, SyncRequest syncRequest) {
 		final var remoteCurrentHeader = syncRequest.getHeader();
-		final var committedCommands = getCommittedCommandsForSyncRequest(remoteCurrentHeader);
+		final var committedCommands = committedReader.getNextCommittedCommands(remoteCurrentHeader);
 
 		if (committedCommands == null) {
 			log.warn("REMOTE_SYNC_REQUEST: Unable to serve sync request {} from sender {}.", remoteCurrentHeader, sender);
@@ -94,16 +94,9 @@ public final class RemoteSyncService {
 		);
 
 		log.info("REMOTE_SYNC_REQUEST: Sending response {} to request {} from {}", verifiable, remoteCurrentHeader, sender);
+		systemCounters.add(CounterType.SYNC_TRANSACTIONS_SENT, committedCommands.getCommands().size());
 
 		syncResponseDispatcher.dispatch(sender, SyncResponse.create(verifiable));
-	}
-
-	private VerifiedCommandsAndProof getCommittedCommandsForSyncRequest(DtoLedgerHeaderAndProof startHeader) {
-		final var start = System.currentTimeMillis();
-		final var result = committedReader.getNextCommittedCommands(startHeader);
-		final var finish = System.currentTimeMillis();
-		systemCounters.set(CounterType.SYNC_LAST_READ_MILLIS, finish - start);
-		return result;
 	}
 
 	public RemoteEventProcessor<StatusRequest> statusRequestEventProcessor() {

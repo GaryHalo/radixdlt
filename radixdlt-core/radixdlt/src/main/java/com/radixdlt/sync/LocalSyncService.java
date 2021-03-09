@@ -340,7 +340,7 @@ public final class LocalSyncService {
 	}
 
 	private SyncState processSyncResponse(SyncingState currentState, BFTNode sender, SyncResponse syncResponse) {
-		log.info("LocalSync: Received sync response {} from {}", syncResponse, sender);
+		log.debug("LocalSync: Received sync response {} from {}", syncResponse, sender);
 
 		if (!currentState.waitingForResponseFrom(sender)) {
 			log.warn("LocalSync: Received unexpected sync response from {}", sender);

@@ -122,12 +122,11 @@ public interface SystemCounters {
 		LEDGER_SYNC_COMMANDS_PROCESSED("ledger.sync_commands_processed"),
 		LEDGER_BFT_COMMANDS_PROCESSED("ledger.bft_commands_processed"),
 
-		SYNC_LAST_READ_MILLIS("sync.last_read_millis"),
+		SYNC_TRANSACTIONS_SENT("sync.transactions_sent"),
 		SYNC_INVALID_COMMANDS_RECEIVED("sync.invalid_commands_received"),
 		SYNC_PROCESSED("sync.processed"),
 		SYNC_TARGET_STATE_VERSION("sync.target_state_version"),
 		SYNC_TARGET_CURRENT_DIFF("sync.target_current_diff"),
-
 
 		MEMPOOL_COUNT("mempool.count"),
 		MEMPOOL_MAXCOUNT("mempool.maxcount"),
