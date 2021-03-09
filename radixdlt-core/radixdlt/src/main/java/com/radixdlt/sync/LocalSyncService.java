@@ -397,12 +397,12 @@ public final class LocalSyncService {
 			return currentState; // ignore, this timeout is no longer valid
 		}
 
-		log.trace("LocalSync: Sync request timeout from peer {}", syncRequestTimeout.getPeer());
+		log.warn("LocalSync: Sync request timeout from peer {}", syncRequestTimeout.getPeer());
 
 		return this.processSync(
 			currentState
 				.clearWaitingFor()
-				.removeCandidate(syncRequestTimeout.getPeer())
+				//.removeCandidate(syncRequestTimeout.getPeer())
 		);
 	}
 
