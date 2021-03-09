@@ -340,24 +340,26 @@ public final class LocalSyncService {
 	}
 
 	private SyncState processSyncResponse(SyncingState currentState, BFTNode sender, SyncResponse syncResponse) {
-		log.trace("LocalSync: Received sync response from {}", sender);
+		log.info("LocalSync: Received sync response {} from {}", syncResponse, sender);
 
 		if (!currentState.waitingForResponseFrom(sender)) {
-			log.trace("LocalSync: Received unexpected sync response from {}", sender);
+			log.warn("LocalSync: Received unexpected sync response from {}", sender);
 			return currentState;
 		}
 
 		// TODO: check validity of response
 		if (syncResponse.getCommandsAndProof().getCommands().isEmpty()) {
-			log.trace("LocalSync: Received empty sync response from {}", sender);
+			log.warn("LocalSync: Received empty sync response from {}", sender);
 			// didn't receive any commands, remove from candidate peers and processSync
 			return this.processSync(
 				currentState
 					.clearWaitingFor()
 					.removeCandidate(sender)
 			);
-		} else if (!this.verifyResponse(syncResponse)) {
-			log.trace("LocalSync: Received invalid sync response from {}", sender);
+		}
+
+		if (!this.verifyResponse(syncResponse)) {
+			log.warn("LocalSync: Received invalid sync response from {}", sender);
 			// validation failed, remove from candidate peers and processSync
 			// TODO: also blacklist peer in PeerManager
 			invalidSyncedCommandsSender.sendInvalidSyncResponse(syncResponse);
@@ -366,14 +368,14 @@ public final class LocalSyncService {
 					.clearWaitingFor()
 					.removeCandidate(sender)
 			);
-		} else {
-			this.syncLedgerUpdateTimeoutDispatcher.dispatch(
-				SyncLedgerUpdateTimeout.create(),
-				500L
-			);
-			this.verifiedSender.sendVerifiedSyncResponse(syncResponse);
-			return currentState.clearWaitingFor();
 		}
+
+		this.syncLedgerUpdateTimeoutDispatcher.dispatch(
+			SyncLedgerUpdateTimeout.create(),
+			500L
+		);
+		this.verifiedSender.sendVerifiedSyncResponse(syncResponse);
+		return currentState.clearWaitingFor();
 	}
 
 	private boolean verifyResponse(SyncResponse syncResponse) {

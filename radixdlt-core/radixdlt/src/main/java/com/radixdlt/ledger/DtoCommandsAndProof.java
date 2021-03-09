@@ -77,7 +77,7 @@ public final class DtoCommandsAndProof {
 
 	@Override
 	public String toString() {
-		return String.format("%s{cmds=%s head=%s tail=%s}", this.getClass().getSimpleName(), commands, head, tail);
+		return String.format("%s{size=%s head=%s tail=%s}", this.getClass().getSimpleName(), commands.size(), head, tail);
 	}
 
 	@Override

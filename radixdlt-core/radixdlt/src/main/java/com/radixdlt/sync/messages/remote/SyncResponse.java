@@ -42,7 +42,7 @@ public final class SyncResponse {
 
 	@Override
 	public String toString() {
-		return String.format("%s{commandsAndProof=%s}", this.getClass().getSimpleName(), commandsAndProof);
+		return String.format("%s{commands=%s}", this.getClass().getSimpleName(), commandsAndProof);
 	}
 
 	@Override
