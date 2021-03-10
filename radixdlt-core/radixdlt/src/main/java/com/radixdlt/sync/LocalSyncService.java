@@ -288,7 +288,7 @@ public final class LocalSyncService {
 		ImmutableList<BFTNode> candidatePeers,
 		VerifiedLedgerHeaderAndProof targetHeader
 	) {
-		log.trace("LocalSync: Syncing to target header {}, got {} candidate peers", targetHeader, candidatePeers.size());
+		log.debug("LocalSync: Syncing to target header {}, got {} candidate peers", targetHeader, candidatePeers.size());
 		return this.processSync(SyncingState.init(currentState.getCurrentHeader(), candidatePeers, targetHeader));
 	}
 
@@ -296,7 +296,7 @@ public final class LocalSyncService {
 		this.updateSyncTargetDiffCounter(currentState);
 
 		if (isFullySynced(currentState)) {
-			log.trace("LocalSync: Fully synced to {}", currentState.getTargetHeader());
+			log.info("LocalSync: Fully synced to {}", currentState.getTargetHeader());
 			// we're fully synced, go to idle and wait for another sync check
 			return this.goToIdle(currentState);
 		}
@@ -319,9 +319,9 @@ public final class LocalSyncService {
 	}
 
 	private SyncState sendSyncRequest(SyncingState currentState, BFTNode peer) {
-		log.trace("LocalSync: Sending sync request to {}", peer);
-
 		final var currentHeader = currentState.getCurrentHeader();
+
+		log.debug("LocalSync: Sending sync request {} to {}", currentHeader, peer);
 
 		this.syncRequestDispatcher.dispatch(peer, SyncRequest.create(currentHeader.toDto()));
 		this.syncRequestTimeoutDispatcher.dispatch(
