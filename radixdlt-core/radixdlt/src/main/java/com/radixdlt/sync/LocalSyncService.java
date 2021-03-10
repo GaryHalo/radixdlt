@@ -171,6 +171,9 @@ public final class LocalSyncService {
 				SyncingState.class, LedgerUpdate.class,
 				state -> ledgerUpdate -> {
 					final var newState = (SyncingState) this.updateCurrentHeaderIfNeeded(state, ledgerUpdate);
+					log.debug("LocalSync: Ledger Update: size: {} tail: {}",
+						ledgerUpdate.getNewCommands().size(), ledgerUpdate.getTail()
+					);
 					return this.processSync(newState);
 				}
 			))
@@ -188,7 +191,10 @@ public final class LocalSyncService {
 			))
 			.put(handler(
 				SyncingState.class, SyncLedgerUpdateTimeout.class,
-				state -> unused -> this.processSync(state)
+				state -> unused -> {
+					log.debug("LocalSync: SyncLedgerUpdateTimeout: {}", unused);
+					return this.processSync(state);
+				}
 			))
 			.build();
 	}
@@ -377,7 +383,10 @@ public final class LocalSyncService {
 			SyncLedgerUpdateTimeout.create(),
 			500L
 		);
+		long start = System.currentTimeMillis();
 		this.verifiedSender.sendVerifiedSyncResponse(syncResponse);
+		long end = System.currentTimeMillis();
+		log.debug("LocalSync: commit took {} milliseconds", end - start);
 		return currentState.clearWaitingFor();
 	}
 
