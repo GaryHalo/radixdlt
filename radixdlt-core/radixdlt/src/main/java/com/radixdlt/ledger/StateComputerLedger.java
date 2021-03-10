@@ -42,6 +42,9 @@ import com.radixdlt.environment.RemoteEventProcessor;
 import com.radixdlt.mempool.MempoolAdd;
 import com.radixdlt.network.TimeSupplier;
 import com.radixdlt.store.LastProof;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
 import java.util.Comparator;
 import java.util.LinkedList;
 import java.util.List;
@@ -52,6 +55,7 @@ import java.util.Optional;
  * Synchronizes execution
  */
 public final class StateComputerLedger implements Ledger, NextCommandGenerator {
+	private static final Logger logger = LogManager.getLogger();
 
 	public interface PreparedCommand {
 		Command command();
@@ -260,6 +264,7 @@ public final class StateComputerLedger implements Ledger, NextCommandGenerator {
 				return;
 			}
 
+			long start = System.currentTimeMillis();
 			Optional<ImmutableList<Command>> verifiedExtension = verifier.verifyAndGetExtension(
 				this.currentLedgerHeader.getAccumulatorState(),
 				verifiedCommandsAndProof.getCommands(),
@@ -284,6 +289,10 @@ public final class StateComputerLedger implements Ledger, NextCommandGenerator {
 
 			// persist
 			this.stateComputer.commit(commandsToStore, vertexStoreState);
+			long end = System.currentTimeMillis();
+			if (end - start > 5000) {
+				logger.info("Ledger time to commit: {} size: {}", end - start, commands.size());
+			}
 
 			// TODO: move all of the following to post-persist event handling
 			this.currentLedgerHeader = nextHeader;
