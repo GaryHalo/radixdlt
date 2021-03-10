@@ -293,6 +293,8 @@ public final class LocalSyncService {
 	}
 
 	private SyncState processSync(SyncingState currentState) {
+		log.debug("LocalSync: process sync {}", currentState);
+
 		this.updateSyncTargetDiffCounter(currentState);
 
 		if (isFullySynced(currentState)) {
@@ -313,6 +315,7 @@ public final class LocalSyncService {
 		return peerToUse
 			.map(peer -> this.sendSyncRequest(currentState, peer))
 			.orElseGet(() -> {
+				log.warn("LocalSync: No connected peer starting fresh sync");
 				// there's no connected peer on our candidates list, starting a fresh sync check immediately
 				return this.initSyncCheck(IdleState.init(currentState.getCurrentHeader()));
 			});
