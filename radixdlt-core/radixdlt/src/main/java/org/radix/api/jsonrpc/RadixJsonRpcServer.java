@@ -17,6 +17,8 @@
 
 package org.radix.api.jsonrpc;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.json.JSONObject;
 import org.radix.api.jsonrpc.handler.AtomHandler;
 import org.radix.api.jsonrpc.handler.HighLevelApiHandler;
@@ -55,6 +57,7 @@ import static org.radix.api.jsonrpc.JsonRpcUtil.methodNotFoundResponse;
  */
 public final class RadixJsonRpcServer {
 	private static final long DEFAULT_MAX_REQUEST_SIZE = 1024L * 1024L;
+	private static final Logger logger = LogManager.getLogger();
 
 	/**
 	 * Maximum request size in bytes
@@ -165,9 +168,15 @@ public final class RadixJsonRpcServer {
 			return errorResponse(REQUEST_TOO_LONG, "request too big: " + length + " > " + maxRequestSizeBytes).toString();
 		}
 
+		logger.debug("RPC request: {}", requestString);
+
 		return jsonObject(requestString)
 			.map(this::handle)
 			.map(Object::toString)
+			.map(str -> {
+				logger.debug("RPC response: {}", str);
+				return str;
+			})
 			.orElseGet(() -> errorResponse(PARSE_ERROR, "unable to parse input").toString());
 	}
 
