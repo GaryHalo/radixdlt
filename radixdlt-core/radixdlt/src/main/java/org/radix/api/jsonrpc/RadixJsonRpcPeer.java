@@ -42,7 +42,7 @@ import static org.radix.api.jsonrpc.JsonRpcUtil.notification;
  * A Stateful JSON RPC 2.0 Server and Client for duplex communication
  */
 public class RadixJsonRpcPeer {
-	private static final Logger LOGGER = LogManager.getLogger();
+	private static final Logger logger = LogManager.getLogger();
 
 	private static final Set<String> SUBSCRIPTION_METHODS = Set.of("Atoms.subscribe", "Atoms.cancel");
 	private static final Set<String> STATUS_METHODS =
@@ -88,15 +88,19 @@ public class RadixJsonRpcPeer {
 	// TODO: multithreading issues ???
 	public void onMessage(String message) {
 
+		logger.debug("RPC: Received message: {}", message);
+
 		final JSONObject jsonRpcRequest;
 		try {
 			jsonRpcRequest = new JSONObject(message);
 		} catch (JSONException e) {
+			logger.debug("RPC: error parsing request", e);
 			callback.accept(this, errorResponse(PARSE_ERROR, e.getMessage()).toString());
 			return;
 		}
 
 		if (!ensureRequestHas(jsonRpcRequest, "id", "method", "params")) {
+			logger.debug("RPC: request does not contain 'id', 'method' or 'params'");
 			return;
 		}
 
@@ -104,6 +108,7 @@ public class RadixJsonRpcPeer {
 
 		if (STATUS_METHODS.contains(jsonRpcMethod) || SUBSCRIPTION_METHODS.contains(jsonRpcMethod)) {
 			if (!jsonRpcRequest.getJSONObject("params").has("subscriberId")) {
+				logger.debug("RPC: missing subscriberId");
 				callback.accept(this, errorResponse(INVALID_PARAMS, "JSON-RPC: No subscriberId").toString());
 				return;
 			}
@@ -123,9 +128,9 @@ public class RadixJsonRpcPeer {
 							RadixJsonRpcPeer.this,
 							errorResponse(SERVER_ERROR, "unable to process request: " + message).toString()
 						);
+						logger.debug("RPC: unable to process request {}", message);
 					}
 				});
-
 		}
 	}
 
@@ -141,7 +146,7 @@ public class RadixJsonRpcPeer {
 
 	// TODO: need to synchronize this with the whole peer
 	public void close() {
-		LOGGER.info("Closing peer");
+		logger.info("RPC: Closing peer");
 
 		atomStatusEpic.dispose();
 		atomsSubscribeEpic.dispose();
