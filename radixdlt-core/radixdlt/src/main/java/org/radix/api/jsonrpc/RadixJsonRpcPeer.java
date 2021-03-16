@@ -123,6 +123,7 @@ public class RadixJsonRpcPeer {
 				.whenComplete((result, exception) -> {
 					if (exception == null) {
 						callback.accept(RadixJsonRpcPeer.this, result);
+						logger.debug("RPC: processing result: {}", result);
 					} else {
 						callback.accept(
 							RadixJsonRpcPeer.this,

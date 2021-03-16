@@ -105,33 +105,46 @@ public final class RadixJsonRpcServer {
 
 	private void fillHandlers() {
 		//BFT
-		handlers.put("BFT.start", systemHandler::handleBftStart);
-		handlers.put("BFT.stop", systemHandler::handleBftStop);
+		addHandler("BFT.start", systemHandler::handleBftStart);
+		addHandler("BFT.stop", systemHandler::handleBftStop);
 
 		//General info
-		handlers.put("Universe.getUniverse", systemHandler::handleGetUniverse);
-		handlers.put("Network.getInfo", systemHandler::handleGetLocalSystem);
-		handlers.put("Ping", systemHandler::handlePing);
+		addHandler("Universe.getUniverse", systemHandler::handleGetUniverse);
+		addHandler("Network.getInfo", systemHandler::handleGetLocalSystem);
+		addHandler("Ping", systemHandler::handlePing);
 
 		//Network info
-		handlers.put("Network.getLivePeers", networkHandler::handleGetLivePeers);
-		handlers.put("Network.getPeers", networkHandler::handleGetPeers);
+		addHandler("Network.getLivePeers", networkHandler::handleGetLivePeers);
+		addHandler("Network.getPeers", networkHandler::handleGetPeers);
 
 		//Atom submission/retrieval
 		//TODO: check and fix method naming?
-		handlers.put("Atoms.submitAtom", atomHandler::handleSubmitAtom);
-		handlers.put("Ledger.getAtom", atomHandler::handleGetAtom);
+		addHandler("Atoms.submitAtom", atomHandler::handleSubmitAtom);
+		addHandler("Ledger.getAtom", atomHandler::handleGetAtom);
 
 		//Ledger
 		//TODO: check and fix method naming?
-		handlers.put("Atoms.getAtomStatus", ledgerHandler::handleGetAtomStatus);
+		addHandler("Atoms.getAtomStatus", ledgerHandler::handleGetAtomStatus);
 
 		//High level API's
-		handlers.put("radix.universeMagic", highLevelApiHandler::handleUniverseMagic);
-		handlers.put("radix.nativeToken", highLevelApiHandler::handleNativeToken);
-		handlers.put("radix.tokenBalances", highLevelApiHandler::handleTokenBalances);
-		handlers.put("radix.executedTransactions", highLevelApiHandler::handleExecutedTransactions);
-		handlers.put("radix.transactionStatus", highLevelApiHandler::handleTransactionStatus);
+		addHandler("radix.universeMagic", highLevelApiHandler::handleUniverseMagic);
+		addHandler("radix.nativeToken", highLevelApiHandler::handleNativeToken);
+		addHandler("radix.tokenBalances", highLevelApiHandler::handleTokenBalances);
+		addHandler("radix.executedTransactions", highLevelApiHandler::handleExecutedTransactions);
+		addHandler("radix.transactionStatus", highLevelApiHandler::handleTransactionStatus);
+	}
+
+	private void addHandler(String methodName, Function<JSONObject, JSONObject> handler) {
+		handlers.put(methodName, input -> {
+			try {
+				logger.debug("RPC: calling {} with {}", methodName, input);
+				JSONObject object = handler.apply(input);
+				logger.debug("RPC: returned from {}: ", methodName, object);
+				return object;
+			} finally {
+				logger.debug("RPC: call to {} done", methodName);
+			}
+		});
 	}
 
 	/**
@@ -168,30 +181,40 @@ public final class RadixJsonRpcServer {
 			return errorResponse(REQUEST_TOO_LONG, "request too big: " + length + " > " + maxRequestSizeBytes).toString();
 		}
 
-		logger.debug("RPC request: {}", requestString);
+		logger.debug("RPC: request: {}", requestString);
 
 		return jsonObject(requestString)
 			.map(this::handle)
 			.map(Object::toString)
 			.map(str -> {
-				logger.debug("RPC response: {}", str);
+				logger.debug("RPC: response: {}", str);
 				return str;
 			})
 			.orElseGet(() -> errorResponse(PARSE_ERROR, "unable to parse input").toString());
 	}
 
 	private JSONObject handle(JSONObject request) {
+		logger.debug("RPC: handling {}", request);
 		if (!request.has("id")) {
+			logger.debug("RPC: id missing");
 			return errorResponse(INVALID_PARAMS, "id missing");
 		}
 
 		if (!request.has("method")) {
+			logger.debug("RPC: method missing");
 			return errorResponse(INVALID_PARAMS, "method missing");
 		}
 
 		try {
 			return Optional.ofNullable(handlers.get(request.getString("method")))
-				.map(handler -> handler.apply(request))
+				.map(handler -> {
+					try {
+						logger.debug("RPC: starting processing of {}", request);
+						return handler.apply(request);
+					} finally {
+						logger.debug("RPC: processing done for {}", request);
+					}
+				})
 				.orElseGet(() -> methodNotFoundResponse(request.get("id")));
 
 		} catch (Exception e) {
