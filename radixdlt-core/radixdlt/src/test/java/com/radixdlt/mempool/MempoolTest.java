@@ -18,6 +18,7 @@
 package com.radixdlt.mempool;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.hash.HashCode;
 import com.google.inject.AbstractModule;
 import com.google.inject.Guice;
 import com.google.inject.Inject;
@@ -25,15 +26,14 @@ import com.google.inject.Injector;
 import com.google.inject.name.Names;
 import com.radixdlt.DefaultSerialization;
 import com.radixdlt.SingleNodeAndPeersDeterministicNetworkModule;
-import com.radixdlt.atommodel.Atom;
+import com.radixdlt.atom.AtomBuilder;
 import com.radixdlt.atommodel.unique.UniqueParticle;
 import com.radixdlt.atomos.RRIParticle;
 import com.radixdlt.consensus.Command;
-import com.radixdlt.consensus.VerifiedLedgerHeaderAndProof;
+import com.radixdlt.consensus.LedgerProof;
 import com.radixdlt.consensus.bft.BFTNode;
 import com.radixdlt.consensus.bft.Self;
 import com.radixdlt.consensus.bft.View;
-import com.radixdlt.constraintmachine.Spin;
 import com.radixdlt.counters.SystemCounters;
 import com.radixdlt.crypto.ECKeyPair;
 import com.radixdlt.crypto.HashUtils;
@@ -44,8 +44,8 @@ import com.radixdlt.identifiers.RRI;
 import com.radixdlt.identifiers.RadixAddress;
 import com.radixdlt.ledger.AccumulatorState;
 import com.radixdlt.ledger.VerifiedCommandsAndProof;
-import com.radixdlt.middleware.ParticleGroup;
-import com.radixdlt.middleware2.ClientAtom;
+import com.radixdlt.atom.ParticleGroup;
+import com.radixdlt.atom.Atom;
 import com.radixdlt.network.addressbook.PeersView;
 import com.radixdlt.serialization.DsonOutput;
 import com.radixdlt.statecomputer.EpochCeilingView;
@@ -96,7 +96,7 @@ public class MempoolTest {
 		return peersView.peers().get(0);
 	}
 
-	private static ClientAtom createAtom(ECKeyPair keyPair, Hasher hasher, int nonce, int numParticles) {
+	private static Atom createAtom(ECKeyPair keyPair, Hasher hasher, int nonce, int numParticles) {
 		RadixAddress address = new RadixAddress((byte) 0, keyPair.getPublicKey());
 
 		ParticleGroup.ParticleGroupBuilder builder = ParticleGroup.builder();
@@ -105,30 +105,31 @@ public class MempoolTest {
 			RRIParticle rriParticle = new RRIParticle(rri, nonce);
 			UniqueParticle uniqueParticle = new UniqueParticle("test" + i, address, nonce + 1);
 			builder
-				.addParticle(rriParticle, Spin.DOWN)
-				.addParticle(uniqueParticle, Spin.UP);
+				.virtualSpinDown(rriParticle)
+				.spinUp(uniqueParticle);
 		}
 		ParticleGroup particleGroup = builder.build();
-		Atom atom = new Atom();
+		AtomBuilder atom = Atom.newBuilder();
 		atom.addParticleGroup(particleGroup);
-		atom.sign(keyPair, hasher);
-		return ClientAtom.convertFromApiAtom(atom, hasher);
+		HashCode hashToSign = atom.computeHashToSign();
+		atom.setSignature(keyPair.euid(), keyPair.sign(hashToSign));
+		return atom.buildAtom();
 	}
 
 	private static Command createCommand(ECKeyPair keyPair, Hasher hasher, int nonce, int numParticles) {
-		ClientAtom atom = createAtom(keyPair, hasher, nonce, numParticles);
+		Atom atom = createAtom(keyPair, hasher, nonce, numParticles);
 		final byte[] payload = DefaultSerialization.getInstance().toDson(atom, DsonOutput.Output.ALL);
 		return new Command(payload);
 	}
 
 	private static Command createCommand(ECKeyPair keyPair, Hasher hasher) {
-		ClientAtom atom = createAtom(keyPair, hasher, 0, 1);
+		Atom atom = createAtom(keyPair, hasher, 0, 1);
 		final byte[] payload = DefaultSerialization.getInstance().toDson(atom, DsonOutput.Output.ALL);
 		return new Command(payload);
 	}
 
 	private static Command createCommand(ECKeyPair keyPair, Hasher hasher, int nonce) {
-		ClientAtom atom = createAtom(keyPair, hasher, nonce, 1);
+		Atom atom = createAtom(keyPair, hasher, nonce, 1);
 		final byte[] payload = DefaultSerialization.getInstance().toDson(atom, DsonOutput.Output.ALL);
 		return new Command(payload);
 	}
@@ -253,7 +254,7 @@ public class MempoolTest {
 		processor.handleMessage(getFirstPeer(), mempoolAdd);
 
 		// Assert
-		assertThat(systemCounters.get(SystemCounters.CounterType.MEMPOOL_COUNT)).isEqualTo(1);
+		assertThat(systemCounters.get(SystemCounters.CounterType.MEMPOOL_COUNT)).isEqualTo(0);
 	}
 
 	@Test
@@ -262,8 +263,9 @@ public class MempoolTest {
 		getInjector().injectMembers(this);
 		ECKeyPair keyPair = ECKeyPair.generateNew();
 		Command command = createCommand(keyPair, hasher);
-		var proof = mock(VerifiedLedgerHeaderAndProof.class);
+		var proof = mock(LedgerProof.class);
 		when(proof.getAccumulatorState()).thenReturn(new AccumulatorState(1, HashUtils.random256()));
+		when(proof.getStateVersion()).thenReturn(1L);
 		var commandsAndProof = new VerifiedCommandsAndProof(ImmutableList.of(command), proof);
 		stateComputer.commit(commandsAndProof, null);
 
@@ -286,8 +288,9 @@ public class MempoolTest {
 
 		// Act
 		Command command2 = createCommand(keyPair, hasher, 0, 1);
-		var proof = mock(VerifiedLedgerHeaderAndProof.class);
+		var proof = mock(LedgerProof.class);
 		when(proof.getAccumulatorState()).thenReturn(new AccumulatorState(1, HashUtils.random256()));
+		when(proof.getStateVersion()).thenReturn(1L);
 		var commandsAndProof = new VerifiedCommandsAndProof(ImmutableList.of(command2), proof);
 		stateComputer.commit(commandsAndProof, null);
 
@@ -308,8 +311,9 @@ public class MempoolTest {
 
 		// Act
 		Command command3 = createCommand(keyPair, hasher, 0, 1);
-		var proof = mock(VerifiedLedgerHeaderAndProof.class);
+		var proof = mock(LedgerProof.class);
 		when(proof.getAccumulatorState()).thenReturn(new AccumulatorState(1, HashUtils.random256()));
+		when(proof.getStateVersion()).thenReturn(1L);
 		var commandsAndProof = new VerifiedCommandsAndProof(ImmutableList.of(command3), proof);
 		stateComputer.commit(commandsAndProof, null);
 

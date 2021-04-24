@@ -20,14 +20,13 @@ package com.radixdlt.integration.distributed.simulation.tests.consensus_ledger_e
 import static org.assertj.core.api.AssertionsForInterfaceTypes.assertThat;
 
 import com.radixdlt.consensus.bft.View;
-import com.radixdlt.integration.distributed.simulation.ConsensusMonitors;
-import com.radixdlt.integration.distributed.simulation.LedgerMonitors;
+import com.radixdlt.integration.distributed.simulation.monitors.consensus.ConsensusMonitors;
+import com.radixdlt.integration.distributed.simulation.monitors.ledger.LedgerMonitors;
 import com.radixdlt.integration.distributed.simulation.NetworkDroppers;
 import com.radixdlt.integration.distributed.simulation.NetworkLatencies;
 import com.radixdlt.integration.distributed.simulation.NetworkOrdering;
 import com.radixdlt.integration.distributed.simulation.SimulationTest;
 import com.radixdlt.integration.distributed.simulation.SimulationTest.Builder;
-
 import java.time.Duration;
 import java.util.Collections;
 import java.util.Random;
@@ -50,7 +49,7 @@ public class OneNodeNeverSendEpochResponseTest {
 		.networkModules(
 			NetworkOrdering.inOrder(),
 			NetworkLatencies.fixed(),
-			NetworkDroppers.oneNodePerEpochResponseDropped()
+			NetworkDroppers.oneNodePerEpochLedgerStatusUpdateDropped()
 		)
 		.pacemakerTimeout(1000)
 		.numNodes(numNodes, 4)

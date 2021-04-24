@@ -19,46 +19,26 @@ package org.radix.api.services;
 
 import org.json.JSONObject;
 
+import com.google.inject.Inject;
 import com.radixdlt.identifiers.AID;
-import com.radixdlt.identifiers.RadixAddress;
-import com.radixdlt.serialization.Serialization;
-import com.radixdlt.store.LedgerEntryStore;
+import com.radixdlt.store.AtomIndex;
 
 import static org.radix.api.jsonrpc.AtomStatus.DOES_NOT_EXIST;
 import static org.radix.api.jsonrpc.AtomStatus.STORED;
-import static org.radix.api.jsonrpc.JsonRpcUtil.jsonArray;
 import static org.radix.api.jsonrpc.JsonRpcUtil.jsonObject;
 import static org.radix.api.jsonrpc.JsonRpcUtil.response;
 
-import static com.radixdlt.serialization.DsonOutput.Output.API;
-
 public class LedgerService {
-	private final LedgerEntryStore ledger;
-	private final Serialization serialization;
+	private final AtomIndex ledger;
 
-	public LedgerService(final LedgerEntryStore ledger, final Serialization serialization) {
+	@Inject
+	public LedgerService(final AtomIndex ledger) {
 		this.ledger = ledger;
-		this.serialization = serialization;
 	}
 
 	public JSONObject getAtomStatus(final JSONObject request, final String aidStr) {
 		var atomStatus = ledger.contains(AID.from(aidStr)) ? STORED : DOES_NOT_EXIST;
 
 		return response(request, jsonObject().put("status", atomStatus.toString()));
-	}
-
-	public JSONObject getAtoms(final JSONObject request, final String addressString) {
-		var address = RadixAddress.from(addressString);
-		var cursor = ledger.search(address.euid().toByteArray());
-		var result = jsonArray();
-
-		while (cursor != null) {
-			//TODO: check what is returned from serialization
-			var jsonObject = serialization.toJsonObject(cursor.get(), API);
-			result.put(jsonObject);
-			cursor = cursor.next();
-		}
-
-		return response(request, result);
 	}
 }

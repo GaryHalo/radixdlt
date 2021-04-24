@@ -28,8 +28,8 @@ import com.radixdlt.environment.ProcessOnDispatch;
 import com.radixdlt.ledger.LedgerUpdate;
 import com.radixdlt.ledger.IncorrectAlwaysAcceptingAccumulatorVerifierModule;
 import com.radixdlt.sync.SometimesByzantineCommittedReader;
-import com.radixdlt.integration.distributed.simulation.ConsensusMonitors;
-import com.radixdlt.integration.distributed.simulation.LedgerMonitors;
+import com.radixdlt.integration.distributed.simulation.monitors.consensus.ConsensusMonitors;
+import com.radixdlt.integration.distributed.simulation.monitors.ledger.LedgerMonitors;
 import com.radixdlt.integration.distributed.simulation.Monitor;
 import com.radixdlt.integration.distributed.simulation.NetworkDroppers;
 import com.radixdlt.integration.distributed.simulation.NetworkLatencies;
@@ -75,7 +75,7 @@ public class ByzantineSyncTest {
 				}
 			})
 			.pacemakerTimeout(5000)
-			.ledgerAndSync(SyncConfig.of(50L, 10, 50L))
+			.ledgerAndSync(SyncConfig.of(200L, 10, 2000L))
 			.addTestModules(
 				ConsensusMonitors.safety(),
 				ConsensusMonitors.liveness(5, TimeUnit.SECONDS),

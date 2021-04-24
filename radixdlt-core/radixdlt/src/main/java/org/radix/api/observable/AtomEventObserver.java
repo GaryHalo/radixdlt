@@ -20,14 +20,12 @@ package org.radix.api.observable;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
-import com.radixdlt.atommodel.Atom;
 import com.radixdlt.crypto.Hasher;
 import com.radixdlt.identifiers.AID;
 import com.radixdlt.identifiers.EUID;
-import com.radixdlt.middleware2.ClientAtom;
+import com.radixdlt.atom.Atom;
 import com.radixdlt.serialization.Serialization;
-import com.radixdlt.statecomputer.CommittedAtom;
-import com.radixdlt.store.LedgerEntryStore;
+import com.radixdlt.store.AtomIndex;
 import com.radixdlt.store.SearchCursor;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -36,7 +34,6 @@ import org.radix.api.observable.AtomEventDto.AtomEventType;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
@@ -57,7 +54,7 @@ public class AtomEventObserver {
 	private CompletableFuture<?> currentRunnable;
 	private CompletableFuture<?> firstRunnable;
 	private final ExecutorService executorService;
-	private final LedgerEntryStore store;
+	private final AtomIndex store;
 	private final Serialization serialization;
 	private final Hasher hasher;
 
@@ -69,7 +66,7 @@ public class AtomEventObserver {
 		AtomQuery atomQuery,
 		Consumer<ObservedAtomEvents> onNext,
 		ExecutorService executorService,
-		LedgerEntryStore store,
+		AtomIndex store,
 		Serialization serialization,
 		Hasher hasher
 	) {
@@ -107,8 +104,8 @@ public class AtomEventObserver {
 		}
 	}
 
-	public void tryNext(CommittedAtom committedAtom, ImmutableSet<EUID> indicies) {
-		if (committedAtom.getClientAtom() == null) {
+	public void tryNext(Atom atom, ImmutableSet<EUID> indicies) {
+		if (atom == null) {
 			return;
 		}
 
@@ -116,20 +113,19 @@ public class AtomEventObserver {
 			return;
 		}
 
-		final Atom rawAtom = ClientAtom.convertToApiAtom(committedAtom.getClientAtom());
-		final AtomEventDto atomEventDto = new AtomEventDto(AtomEventType.STORE, rawAtom);
+		final AtomEventDto atomEventDto = new AtomEventDto(AtomEventType.STORE, atom);
 		synchronized (this) {
 			this.currentRunnable = currentRunnable.thenRunAsync(() -> update(atomEventDto), executorService);
 		}
 	}
 
 	private void sync() {
-		SearchCursor cursor = store.search(atomQuery.getDestination().toByteArray());
+		SearchCursor cursor = store.search();
 		Set<AID> processedAtomIds = Sets.newHashSet();
-		partialSync(cursor, processedAtomIds);
+		partialSync(atomQuery.getDestination(), cursor, processedAtomIds);
 	}
 
-	private void partialSync(SearchCursor cursor, final Set<AID> processedAtomIds) {
+	private void partialSync(EUID destination, SearchCursor cursor, final Set<AID> processedAtomIds) {
 		long count = 0;
 		try {
 			while (cursor != null) {
@@ -137,22 +133,27 @@ public class AtomEventObserver {
 					return;
 				}
 
-				if (count >= 200) {
-					delaySync(cursor, processedAtomIds);
+				if (count >= 10000) {
+					delaySync(destination, cursor, processedAtomIds);
 					return;
 				}
 
-				List<ClientAtom> atoms = new ArrayList<>();
+				List<Atom> atoms = new ArrayList<>();
 				while (cursor != null && atoms.size() < BATCH_SIZE) {
 					AID aid = cursor.get();
 					processedAtomIds.add(aid);
-					Optional<ClientAtom> ledgerEntry = store.get(aid);
-					ledgerEntry.ifPresent(atoms::add);
+					Atom ledgerEntry = store.get(aid).orElseThrow();
+					if (ledgerEntry
+						.upParticles()
+						.flatMap(p -> p.getDestinations().stream())
+						.anyMatch(destination::equals)
+					) {
+						atoms.add(ledgerEntry);
+					}
 					cursor = cursor.next();
 				}
 				if (!atoms.isEmpty()) {
 					final Stream<AtomEventDto> atomEvents = atoms.stream()
-						.map(ClientAtom::convertToApiAtom)
 						.map(a -> new AtomEventDto(AtomEventType.STORE, a));
 					onNext.accept(new ObservedAtomEvents(false, atomEvents));
 					count += atoms.size();
@@ -166,7 +167,8 @@ public class AtomEventObserver {
 				// Note that we filter here so that the filter executes with lock held
 				atomEvents = this.waitingQueue.stream()
 					.filter(aed -> {
-							return !processedAtomIds.contains(Atom.aidOf(aed.getAtom(), hasher))
+							var aid = aed.getAtom().getAID();
+							return !processedAtomIds.contains(aid)
 								|| aed.getType() == AtomEventType.DELETE;
 						}
 					)
@@ -182,18 +184,18 @@ public class AtomEventObserver {
 		}
 	}
 
-	private void delaySync(SearchCursor cursor, Set<AID> processedAtomIds) {
+	private void delaySync(EUID destination, SearchCursor cursor, Set<AID> processedAtomIds) {
 		synchronized (this) {
 			this.currentRunnable = currentRunnable.thenRunAsync(() -> {
 				// Hack to throttle back high amounts of atom reads
 				// Will fix this once an async library is used
 				try {
-					TimeUnit.SECONDS.sleep(1);
+					TimeUnit.MILLISECONDS.sleep(50);
 				} catch (InterruptedException e) {
 					// Re-interrupt and continue
 					Thread.currentThread().interrupt();
 				}
-				this.partialSync(cursor, processedAtomIds);
+				this.partialSync(destination, cursor, processedAtomIds);
 			}, executorService);
 		}
 	}

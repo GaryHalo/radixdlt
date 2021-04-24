@@ -25,7 +25,7 @@ import com.google.inject.TypeLiteral;
 import com.google.inject.name.Named;
 import com.google.inject.name.Names;
 import com.radixdlt.CryptoModule;
-import com.radixdlt.atommodel.Atom;
+import com.radixdlt.atom.Atom;
 import com.radixdlt.counters.SystemCounters;
 import com.radixdlt.counters.SystemCountersImpl;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -73,15 +73,16 @@ import org.apache.commons.cli.DefaultParser;
 import org.apache.commons.cli.HelpFormatter;
 import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
-import org.radix.universe.output.AWSSecretManager;
-import org.radix.universe.output.AWSSecretsUniverseOutput;
+import com.radixdlt.utils.AWSSecretManager;
+import com.radixdlt.utils.AWSSecretsOutputOptions;
 import org.radix.universe.output.HelmUniverseOutput;
 
-import java.io.ByteArrayOutputStream;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.math.BigDecimal;
-import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.security.Security;
 import java.time.Instant;
 
@@ -90,7 +91,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
-import java.util.zip.GZIPOutputStream;
 
 public final class GenerateUniverses {
 	private GenerateUniverses() { }
@@ -155,7 +155,7 @@ public final class GenerateUniverses {
 			final boolean enableAwsSecrets = Boolean.parseBoolean(cmd.getOptionValue("as"));
 			final boolean recreateAwsSecrets = Boolean.parseBoolean(cmd.getOptionValue("rs"));
 			final String networkName = getOption(cmd, 'n').orElse(DEFAULT_NETWORK_NAME);
-			final AWSSecretsUniverseOutput awsSecretsUniverseOutput = new AWSSecretsUniverseOutput(enableAwsSecrets, recreateAwsSecrets, networkName);
+			final AWSSecretsOutputOptions awsSecretsOutputOptions = new AWSSecretsOutputOptions(enableAwsSecrets, recreateAwsSecrets, networkName);
 
 			final ImmutableList<UInt256> stakes = parseStake(getOption(cmd, 'S').orElse(DEFAULT_STAKE));
 			final UniverseType universeType = parseUniverseType(getOption(cmd, 't').orElse(DEFAULT_UNIVERSE));
@@ -186,6 +186,15 @@ public final class GenerateUniverses {
 					TokenIssuance.of(pubkeyOf(5), unitsToSubunits(DEFAULT_ISSUANCE))
 				);
 			}
+
+			if (universeType == UniverseType.DEVELOPMENT) {
+				// Issue tokens to initial validators for now to support application services
+				// FIXME: Remove this
+				validatorKeys.stream()
+					.map(kp -> TokenIssuance.of(kp.getPublicKey(), unitsToSubunits(DEFAULT_ISSUANCE)))
+					.forEach(tokenIssuancesBuilder::add);
+			}
+
 			final ImmutableList<TokenIssuance> tokenIssuances = tokenIssuancesBuilder
 				.addAll(getTokenIssuances(stakeDelegations))
 				.build();
@@ -256,10 +265,11 @@ public final class GenerateUniverses {
 
 			if (outputPrivateKeys) {
 				System.out.format("export RADIXDLT_UNIVERSE_PRIVKEY=%s%n", Bytes.toBase64String(universe.getFirst().getPrivateKey()));
-				outputNumberedKeys("VALIDATOR_%s", validatorKeys, helmUniverseOutput, awsSecretsUniverseOutput);
-				outputNumberedKeys("STAKER_%s", Lists.transform(stakeDelegations, StakeDelegation::staker), helmUniverseOutput, awsSecretsUniverseOutput);
+				outputNumberedKeys("VALIDATOR_%s", validatorKeys, helmUniverseOutput, awsSecretsOutputOptions);
+				outputNumberedKeys("STAKER_%s", Lists.transform(stakeDelegations, StakeDelegation::staker), helmUniverseOutput,
+					awsSecretsOutputOptions);
 			}
-			outputUniverse(suppressCborOutput, suppressJsonOutput, universeType, universe, helmUniverseOutput, awsSecretsUniverseOutput);
+			outputUniverse(suppressCborOutput, suppressJsonOutput, universeType, universe, helmUniverseOutput, awsSecretsOutputOptions);
 		} catch (ParseException e) {
 			System.err.println(e.getMessage());
 			usage(options);
@@ -338,7 +348,7 @@ public final class GenerateUniverses {
 		String template,
 		List<ECKeyPair> keys,
 		HelmUniverseOutput helmUniverseOutput,
-		AWSSecretsUniverseOutput awsSecretsUniverseOutput
+		AWSSecretsOutputOptions awsSecretsOutputOptions
 	) {
 		int n = 0;
 		List<Map<String, Object>> validators = new ArrayList<>();
@@ -348,10 +358,11 @@ public final class GenerateUniverses {
 		for (ECKeyPair k : keys) {
 			Map<String, Object> validator = new HashMap<>();
 			String nodeName = String.format("node%s", n);
+			validator.put("node", n);
 			String keyname = String.format(template, n++);
-			if (!helmUniverseOutput.getOutputHelmValues() && !awsSecretsUniverseOutput.getEnableAwsSecrets()) {
+			if (isStdOutput(helmUniverseOutput, awsSecretsOutputOptions)) {
 				System.out.format("export RADIXDLT_%s_PRIVKEY=%s%n", keyname, Bytes.toBase64String(k.getPrivateKey()));
-			} else if (helmUniverseOutput.getOutputHelmValues() || awsSecretsUniverseOutput.getEnableAwsSecrets()) {
+			} else if (isHelmOrAwsOutuput(helmUniverseOutput, awsSecretsOutputOptions)) {
 				nodeNames.add(nodeName);
 				validator.put("host", nodeName);
 				if (template.startsWith(VALIDATOR_PREFIX)) {
@@ -364,12 +375,16 @@ public final class GenerateUniverses {
 			}
 		}
 
-		if (awsSecretsUniverseOutput.getEnableAwsSecrets()) {
-			generateAWSSecrets(validators, VALIDATOR_PREFIX, template, awsSecretsUniverseOutput, compress);
+		if (awsSecretsOutputOptions.getEnableAwsSecrets()) {
+			generateValidatorsAWSSecrets(validators, VALIDATOR_PREFIX, template, awsSecretsOutputOptions, compress);
 		}
 		if (helmUniverseOutput.getOutputHelmValues()) {
 			generateHelmFiles(validators, VALIDATOR_PREFIX, template, nodeNames, helmUniverseOutput);
 		}
+	}
+
+	private static boolean isStdOutput(HelmUniverseOutput helmUniverseOutput, AWSSecretsOutputOptions awsSecretsOutputOptions) {
+		return !helmUniverseOutput.getOutputHelmValues() && !awsSecretsOutputOptions.getEnableAwsSecrets();
 	}
 
 
@@ -379,7 +394,7 @@ public final class GenerateUniverses {
 		UniverseType type,
 		Pair<ECKeyPair, Universe> p,
 		HelmUniverseOutput helmUniverseOutput,
-		AWSSecretsUniverseOutput awsSecretsUniverseOutput
+		AWSSecretsOutputOptions awsSecretsOutputOptions
 	) {
 		final Serialization serialization = DefaultSerialization.getInstance();
 		final ECKeyPair k = p.getFirst();
@@ -388,13 +403,13 @@ public final class GenerateUniverses {
 			byte[] universeBytes = serialization.toDson(u, Output.WIRE);
 			RadixAddress universeAddress = new RadixAddress((byte) u.getMagic(), k.getPublicKey());
 			RRI tokenRri = RRI.of(universeAddress, TokenDefinitionUtils.getNativeTokenShortCode());
-			if (!helmUniverseOutput.getOutputHelmValues() && !awsSecretsUniverseOutput.getEnableAwsSecrets()) {
+			if (isStdOutput(helmUniverseOutput, awsSecretsOutputOptions)) {
 				System.out.format("export RADIXDLT_UNIVERSE_TYPE=%s%n", type);
 				System.out.format("export RADIXDLT_UNIVERSE_PUBKEY=%s%n", k.getPublicKey().toBase64());
 				System.out.format("export RADIXDLT_UNIVERSE_ADDRESS=%s%n", universeAddress);
 				System.out.format("export RADIXDLT_UNIVERSE_TOKEN=%s%n", tokenRri);
 				System.out.format("export RADIXDLT_UNIVERSE=%s%n", Bytes.toBase64String(universeBytes));
-			} else if (helmUniverseOutput.getOutputHelmValues() || awsSecretsUniverseOutput.getEnableAwsSecrets()) {
+			} else if (isHelmOrAwsOutuput(helmUniverseOutput, awsSecretsOutputOptions)) {
 				Map<String, Map<String, Object>> config = new HashMap<>();
 				Map<String, Object> universe = new HashMap<>();
 				universe.put("type", type);
@@ -402,16 +417,19 @@ public final class GenerateUniverses {
 				universe.put("pubkey", k.getPublicKey().toBase64());
 				universe.put("address", universeAddress.toString());
 				universe.put("token", tokenRri.toString());
-				universe.put("value", Bytes.toBase64String(universeBytes));
+
+				JSONObject universeJson = new JSONObject(serialization.toJson(p.getSecond(), Output.WIRE));
+				universe.put("value", universeJson.toString());
+
 				config.put("universe", universe);
 
 				if (helmUniverseOutput.getOutputHelmValues()) {
 					String filename = String.format("%s/universe.yaml", helmUniverseOutput.getHelmValuesPath());
 					writeYamlOutput(filename, config);
-				} else if (awsSecretsUniverseOutput.getEnableAwsSecrets()) {
+				} else if (awsSecretsOutputOptions.getEnableAwsSecrets()) {
 					boolean compress = true;
-					String secretName = String.format("%s/universe", awsSecretsUniverseOutput.getNetworkName());
-					writeAWSSecret(universe, secretName, awsSecretsUniverseOutput, compress);
+					String secretName = String.format("%s/universe", awsSecretsOutputOptions.getNetworkName());
+					writeTextAWSSecret(universe, secretName, awsSecretsOutputOptions, compress);
 				}
 			}
 		}
@@ -419,6 +437,10 @@ public final class GenerateUniverses {
 			JSONObject json = new JSONObject(serialization.toJson(p.getSecond(), Output.WIRE));
 			System.out.println(json.toString(4));
 		}
+	}
+
+	private static boolean isHelmOrAwsOutuput(HelmUniverseOutput helmUniverseOutput, AWSSecretsOutputOptions awsSecretsOutputOptions) {
+		return helmUniverseOutput.getOutputHelmValues() || awsSecretsOutputOptions.getEnableAwsSecrets();
 	}
 
 	private static void usage(Options options) {
@@ -455,11 +477,19 @@ public final class GenerateUniverses {
 		}
 	}
 
-	public static void writeAWSSecret(Map<String, Object> awsSecret, String secretName, AWSSecretsUniverseOutput awsSecretsUniverseOutput, boolean compress) {
+	public static void writeBinaryAWSSecret(Map<String, Object> awsSecret, String secretName, AWSSecretsOutputOptions awsSecretsOutputOptions, boolean compress) {
+		writeAWSSecret(awsSecret, secretName, awsSecretsOutputOptions, compress, true);
+	}
+
+	public static void writeTextAWSSecret(Map<String, Object> awsSecret, String secretName, AWSSecretsOutputOptions awsSecretsOutputOptions, boolean compress) {
+		writeAWSSecret(awsSecret, secretName, awsSecretsOutputOptions, compress, false);
+	}
+
+	public static void writeAWSSecret(Map<String, Object> awsSecret, String secretName, AWSSecretsOutputOptions awsSecretsOutputOptions, boolean compress, boolean binarySecret) {
 		if (AWSSecretManager.awsSecretExists(secretName)) {
-			AWSSecretManager.updateAWSSecret(awsSecret, secretName, awsSecretsUniverseOutput, compress);
+			AWSSecretManager.updateAWSSecret(awsSecret, secretName, awsSecretsOutputOptions, compress, binarySecret);
 		} else {
-			AWSSecretManager.createAWSSecret(awsSecret, secretName, awsSecretsUniverseOutput, compress);
+			AWSSecretManager.createAWSSecret(awsSecret, secretName, awsSecretsOutputOptions, compress, binarySecret);
 		}
 	}
 
@@ -491,30 +521,56 @@ public final class GenerateUniverses {
 	}
 
 
-	private static void generateAWSSecrets(
+	private static void generateValidatorsAWSSecrets(
 		final List<Map<String, Object>> validators,
 		final String validatorPrefix,
 		final String template,
-		final AWSSecretsUniverseOutput awsSecretsUniverseOutput,
+		final AWSSecretsOutputOptions awsSecretsOutputOptions,
 		boolean compress
-	) {
+	)  {
 		for (Map<String, Object> validator : validators) {
-			Map<String, Object> awsSecret = new HashMap<>();
+			Map<String, Object> validatorAwsSecret = new HashMap<>();
+			Map<String, Object> keyFileAwsSecret = new HashMap<>();
 			String name = (String) validator.get("host");
+			int nodeId = (int)validator.get("node");
 			if (template.startsWith(validatorPrefix)) {
-				awsSecret.put("key", validator.get("privateKey"));
+				validatorAwsSecret.put("key", validator.get("privateKey"));
+				String validatorkeyFile = String.format("validator%s.ks", nodeId);
+				Path validatorPath = Paths.get(validatorkeyFile);
+				try {
+					byte[] data = Files.readAllBytes(validatorPath);
+					keyFileAwsSecret.put("key", data);
+				} catch (IOException e) {
+					throw new IllegalStateException("While reading validator keys", e);
+				}
+
+
 			} else if (template.startsWith("STAKER")) {
-				awsSecret.put("key", validator.get("stakingKey"));
+				validatorAwsSecret.put("key", validator.get("stakingKey"));
+				String stakerKeyFile = String.format("staker%s.ks", nodeId);
+				Path stakerFilePath = Paths.get(stakerKeyFile);
+				try {
+					byte[] data = Files.readAllBytes(stakerFilePath);
+					keyFileAwsSecret.put("key", data);
+				} catch (IOException e) {
+					throw new IllegalStateException("While reading staker keys", e);
+				}
 			}
-			String secretName = String.format("%s/%s/staker", awsSecretsUniverseOutput.getNetworkName(), name);
+			String secretName = String.format("%s/%s/staker", awsSecretsOutputOptions.getNetworkName(), name);
+			String keyFileSecretName = String.format("%s/%s/staker_key", awsSecretsOutputOptions.getNetworkName(), name);
 			if (template.startsWith(validatorPrefix)) {
-				secretName = String.format("%s/%s/validator", awsSecretsUniverseOutput.getNetworkName(), name);
+				secretName = String.format("%s/%s/validator", awsSecretsOutputOptions.getNetworkName(), name);
+				keyFileSecretName = String.format("%s/%s/validator_key", awsSecretsOutputOptions.getNetworkName(), name);
 			}
-			writeAWSSecret(awsSecret, secretName, awsSecretsUniverseOutput, compress);
+
+
+			writeTextAWSSecret(validatorAwsSecret, secretName, awsSecretsOutputOptions, compress);
+			writeBinaryAWSSecret(keyFileAwsSecret, keyFileSecretName, awsSecretsOutputOptions, compress);
+
 			System.out.format(
 				"AWS secrets created for network %s %s%n",
-				awsSecretsUniverseOutput.getEnableAwsSecrets(),
-				awsSecretsUniverseOutput.getNetworkName()
+				awsSecretsOutputOptions.getEnableAwsSecrets(),
+				awsSecretsOutputOptions.getNetworkName()
 			);
 		}
 	}

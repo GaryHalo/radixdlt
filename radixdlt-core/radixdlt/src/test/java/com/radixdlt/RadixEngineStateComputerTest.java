@@ -23,6 +23,7 @@ import static org.mockito.Mockito.mock;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
+import com.google.common.hash.HashCode;
 import com.google.inject.AbstractModule;
 import com.google.inject.Guice;
 import com.google.inject.Inject;
@@ -30,7 +31,7 @@ import com.google.inject.Injector;
 import com.google.inject.Module;
 import com.google.inject.TypeLiteral;
 import com.google.inject.name.Names;
-import com.radixdlt.atommodel.Atom;
+import com.radixdlt.atom.AtomBuilder;
 import com.radixdlt.atommodel.system.SystemParticle;
 import com.radixdlt.atommodel.validators.RegisteredValidatorParticle;
 import com.radixdlt.atommodel.validators.UnregisteredValidatorParticle;
@@ -38,7 +39,7 @@ import com.radixdlt.consensus.BFTHeader;
 import com.radixdlt.consensus.Command;
 import com.radixdlt.consensus.LedgerHeader;
 import com.radixdlt.consensus.TimestampedECDSASignatures;
-import com.radixdlt.consensus.VerifiedLedgerHeaderAndProof;
+import com.radixdlt.consensus.LedgerProof;
 import com.radixdlt.consensus.Sha256Hasher;
 import com.radixdlt.consensus.bft.BFTNode;
 import com.radixdlt.consensus.bft.BFTValidator;
@@ -46,9 +47,7 @@ import com.radixdlt.consensus.bft.BFTValidatorSet;
 import com.radixdlt.consensus.bft.PersistentVertexStore;
 import com.radixdlt.consensus.bft.View;
 import com.radixdlt.constraintmachine.CMErrorCode;
-import com.radixdlt.constraintmachine.CMMicroInstruction;
 import com.radixdlt.constraintmachine.PermissionLevel;
-import com.radixdlt.constraintmachine.Spin;
 import com.radixdlt.counters.SystemCounters;
 import com.radixdlt.counters.SystemCountersImpl;
 import com.radixdlt.crypto.ECKeyPair;
@@ -67,19 +66,18 @@ import com.radixdlt.mempool.MempoolAddFailure;
 import com.radixdlt.mempool.MempoolAddSuccess;
 import com.radixdlt.mempool.MempoolMaxSize;
 import com.radixdlt.mempool.MempoolThrottleMs;
-import com.radixdlt.middleware.ParticleGroup;
-import com.radixdlt.middleware2.ClientAtom;
-import com.radixdlt.middleware2.LedgerAtom;
-import com.radixdlt.middleware2.store.RadixEngineAtomicCommitManager;
+import com.radixdlt.atom.ParticleGroup;
+import com.radixdlt.atom.Atom;
 import com.radixdlt.serialization.DsonOutput;
 import com.radixdlt.serialization.DsonOutput.Output;
 import com.radixdlt.serialization.Serialization;
-import com.radixdlt.statecomputer.CommittedAtom;
+import com.radixdlt.statecomputer.AtomsCommittedToLedger;
 import com.radixdlt.statecomputer.EpochCeilingView;
 import com.radixdlt.statecomputer.InvalidProposedCommand;
 import com.radixdlt.statecomputer.MaxValidators;
 import com.radixdlt.statecomputer.AtomsRemovedFromMempool;
 import com.radixdlt.statecomputer.MinValidators;
+import com.radixdlt.statecomputer.LedgerAndBFTProof;
 import com.radixdlt.statecomputer.RadixEngineModule;
 import com.radixdlt.statecomputer.RadixEngineStateComputer;
 
@@ -95,6 +93,7 @@ import com.radixdlt.store.InMemoryEngineStore;
 import com.radixdlt.utils.TypedMocks;
 import com.radixdlt.utils.UInt256;
 
+import java.util.List;
 import java.util.stream.Stream;
 import org.assertj.core.api.Condition;
 import org.junit.Before;
@@ -104,10 +103,10 @@ import org.junit.Test;
 public class RadixEngineStateComputerTest {
 	@Inject
 	@Genesis
-	private Atom atom;
+	private Atom genesisAtom;
 
 	@Inject
-	private RadixEngine<LedgerAtom> radixEngine;
+	private RadixEngine<Atom, LedgerAndBFTProof> radixEngine;
 
 	@Inject
 	private RadixEngineStateComputer sut;
@@ -117,7 +116,7 @@ public class RadixEngineStateComputerTest {
 
 
 	private Serialization serialization = DefaultSerialization.getInstance();
-	private EngineStore<LedgerAtom> engineStore;
+	private EngineStore<Atom, LedgerAndBFTProof> engineStore;
 	private ImmutableList<ECKeyPair> registeredNodes = ImmutableList.of(
 		ECKeyPair.generateNew(),
 		ECKeyPair.generateNew()
@@ -136,8 +135,7 @@ public class RadixEngineStateComputerTest {
 					.toInstance(registeredNodes);
 				bind(Serialization.class).toInstance(serialization);
 				bind(Hasher.class).toInstance(Sha256Hasher.withDefaultSerialization());
-				bind(new TypeLiteral<EngineStore<LedgerAtom>>() { }).toInstance(engineStore);
-				bind(RadixEngineAtomicCommitManager.class).toInstance(mock(RadixEngineAtomicCommitManager.class));
+				bind(new TypeLiteral<EngineStore<Atom, LedgerAndBFTProof>>() { }).toInstance(engineStore);
 				bind(PersistentVertexStore.class).toInstance(mock(PersistentVertexStore.class));
 				bindConstant().annotatedWith(Names.named("magic")).to(0);
 				bindConstant().annotatedWith(MinValidators.class).to(1);
@@ -155,6 +153,8 @@ public class RadixEngineStateComputerTest {
 						.toInstance(TypedMocks.rmock(EventDispatcher.class));
 				bind(new TypeLiteral<EventDispatcher<AtomsRemovedFromMempool>>() { })
 						.toInstance(TypedMocks.rmock(EventDispatcher.class));
+				bind(new TypeLiteral<EventDispatcher<AtomsCommittedToLedger>>() { })
+					.toInstance(TypedMocks.rmock(EventDispatcher.class));
 
 				bind(SystemCounters.class).to(SystemCountersImpl.class);
 			}
@@ -162,9 +162,8 @@ public class RadixEngineStateComputerTest {
 	}
 
 	private void setupGenesis() throws RadixEngineException {
-		final ClientAtom genesisAtom = ClientAtom.convertFromApiAtom(atom, hasher);
-		RadixEngine.RadixEngineBranch<LedgerAtom> branch = radixEngine.transientBranch();
-		branch.checkAndStore(genesisAtom, PermissionLevel.SYSTEM);
+		var branch = radixEngine.transientBranch();
+		branch.execute(List.of(genesisAtom), PermissionLevel.SYSTEM);
 		final var genesisValidatorSet = validatorSetBuilder.buildValidatorSet(
 			branch.getComputedState(RegisteredValidators.class),
 			branch.getComputedState(Stakes.class)
@@ -173,18 +172,14 @@ public class RadixEngineStateComputerTest {
 
 		byte[] payload = serialization.toDson(genesisAtom, DsonOutput.Output.ALL);
 		Command command = new Command(payload);
-		VerifiedLedgerHeaderAndProof genesisLedgerHeader = VerifiedLedgerHeaderAndProof.genesis(
+		LedgerProof genesisLedgerHeader = LedgerProof.genesis(
 			hasher.hash(command),
 			genesisValidatorSet
 		);
 		if (!genesisLedgerHeader.isEndOfEpoch()) {
 			throw new IllegalStateException("Genesis must be end of epoch");
 		}
-		CommittedAtom committedAtom = CommittedAtom.create(
-			genesisAtom,
-			genesisLedgerHeader
-		);
-		radixEngine.checkAndStore(committedAtom, PermissionLevel.SYSTEM);
+		radixEngine.execute(List.of(genesisAtom), LedgerAndBFTProof.create(genesisLedgerHeader), PermissionLevel.SYSTEM);
 	}
 
 	@Before
@@ -204,17 +199,14 @@ public class RadixEngineStateComputerTest {
 	private static RadixEngineCommand systemUpdateCommand(long prevView, long nextView, long nextEpoch) {
 		SystemParticle lastSystemParticle = new SystemParticle(1, prevView, 0);
 		SystemParticle nextSystemParticle = new SystemParticle(nextEpoch, nextView, 0);
-		ClientAtom clientAtom = ClientAtom.create(
-			ImmutableList.of(
-				CMMicroInstruction.checkSpinAndPush(lastSystemParticle, Spin.UP),
-				CMMicroInstruction.checkSpinAndPush(nextSystemParticle, Spin.NEUTRAL),
-				CMMicroInstruction.particleGroup()
-			),
-			hasher
-		);
-		final byte[] payload = DefaultSerialization.getInstance().toDson(clientAtom, Output.ALL);
+		Atom atom = Atom.newBuilder().addParticleGroup(ParticleGroup.builder()
+			.spinDown(lastSystemParticle)
+			.spinUp(nextSystemParticle)
+			.build()
+		).buildAtom();
+		final byte[] payload = DefaultSerialization.getInstance().toDson(atom, Output.ALL);
 		Command cmd = new Command(payload);
-		return new RadixEngineCommand(cmd, hasher.hash(cmd), clientAtom, PermissionLevel.USER);
+		return new RadixEngineCommand(cmd, hasher.hash(cmd), atom, PermissionLevel.USER);
 	}
 
 	private static RadixEngineCommand registerCommand(ECKeyPair keyPair) {
@@ -226,13 +218,14 @@ public class RadixEngineStateComputerTest {
 			address, 0
 		);
 		ParticleGroup particleGroup = ParticleGroup.builder()
-			.addParticle(unregisteredValidatorParticle, Spin.DOWN)
-			.addParticle(registeredValidatorParticle, Spin.UP)
+			.virtualSpinDown(unregisteredValidatorParticle)
+			.spinUp(registeredValidatorParticle)
 			.build();
-		Atom atom = new Atom();
+		AtomBuilder atom = Atom.newBuilder();
 		atom.addParticleGroup(particleGroup);
-		atom.sign(keyPair, hasher);
-		ClientAtom clientAtom = ClientAtom.convertFromApiAtom(atom, hasher);
+		HashCode hashToSign = atom.computeHashToSign();
+		atom.setSignature(keyPair.euid(), keyPair.sign(hashToSign));
+		Atom clientAtom = atom.buildAtom();
 		final byte[] payload = DefaultSerialization.getInstance().toDson(clientAtom, Output.ALL);
 		Command cmd = new Command(payload);
 		return new RadixEngineCommand(cmd, hasher.hash(cmd), clientAtom, PermissionLevel.USER);
@@ -241,7 +234,7 @@ public class RadixEngineStateComputerTest {
 	@Test
 	public void executing_non_epoch_high_view_should_return_no_validator_set() {
 		// Action
-		StateComputerResult result = sut.prepare(ImmutableList.of(), null, 1, View.of(9), 1);
+		StateComputerResult result = sut.prepare(ImmutableList.of(), null, 1, View.of(9), 0);
 
 		// Assert
 		assertThat(result.getSuccessfulCommands()).hasSize(1);
@@ -252,7 +245,7 @@ public class RadixEngineStateComputerTest {
 	@Test
 	public void executing_epoch_high_view_should_return_next_validator_set() {
 		// Act
-		StateComputerResult result = sut.prepare(ImmutableList.of(), null, 1, View.of(10), 1);
+		StateComputerResult result = sut.prepare(ImmutableList.of(), null, 1, View.of(10), 0);
 
 		// Assert
 		assertThat(result.getSuccessfulCommands()).hasSize(1);
@@ -273,7 +266,7 @@ public class RadixEngineStateComputerTest {
 		BFTNode node = BFTNode.create(keyPair.getPublicKey());
 
 		// Act
-		StateComputerResult result = sut.prepare(ImmutableList.of(), cmd.command(), 1, View.of(10), 1);
+		StateComputerResult result = sut.prepare(ImmutableList.of(), cmd.command(), 1, View.of(10), 0);
 
 		// Assert
 		assertThat(result.getSuccessfulCommands()).hasSize(1); // since high view, command is not executed
@@ -291,7 +284,7 @@ public class RadixEngineStateComputerTest {
 		BFTNode node = BFTNode.create(unregisteredNode.getPublicKey());
 
 		// Act
-		StateComputerResult result = sut.prepare(ImmutableList.of(cmd), null, 1, View.of(10), 1);
+		StateComputerResult result = sut.prepare(ImmutableList.of(cmd), null, 1, View.of(10), 0);
 
 		// Assert
 		assertThat(result.getSuccessfulCommands()).hasSize(1);
@@ -305,10 +298,10 @@ public class RadixEngineStateComputerTest {
 	@Test
 	public void preparing_system_update_from_vertex_should_fail() {
 		// Arrange
-		RadixEngineCommand cmd = systemUpdateCommand(0, 1, 1);
+		RadixEngineCommand cmd = systemUpdateCommand(1, 2, 1);
 
 		// Act
-		StateComputerResult result = sut.prepare(ImmutableList.of(), cmd.command(), 1, View.of(1), 1);
+		StateComputerResult result = sut.prepare(ImmutableList.of(), cmd.command(), 1, View.of(1), 0);
 
 		// Assert
 		assertThat(result.getSuccessfulCommands()).hasSize(1);
@@ -331,17 +324,17 @@ public class RadixEngineStateComputerTest {
 	public void committing_epoch_high_views_should_fail() {
 		// Arrange
 		RadixEngineCommand cmd0 = systemUpdateCommand(0, 10, 1);
-		VerifiedLedgerHeaderAndProof verifiedLedgerHeaderAndProof = new VerifiedLedgerHeaderAndProof(
+		LedgerProof ledgerProof = new LedgerProof(
 			mock(BFTHeader.class),
 			mock(BFTHeader.class),
 			0,
 			HashUtils.zero256(),
-			LedgerHeader.create(0, View.of(11), new AccumulatorState(3, HashUtils.zero256()), 1),
+			LedgerHeader.create(0, View.of(11), new AccumulatorState(3, HashUtils.zero256()), 0),
 			new TimestampedECDSASignatures()
 		);
 		VerifiedCommandsAndProof commandsAndProof = new VerifiedCommandsAndProof(
 			ImmutableList.of(cmd0.command()),
-			verifiedLedgerHeaderAndProof
+			ledgerProof
 		);
 
 		// Act
@@ -357,17 +350,17 @@ public class RadixEngineStateComputerTest {
 		ECKeyPair keyPair = ECKeyPair.generateNew();
 		RadixEngineCommand cmd0 = systemUpdateCommand(0, 0, 2);
 		RadixEngineCommand cmd1 = registerCommand(keyPair);
-		VerifiedLedgerHeaderAndProof verifiedLedgerHeaderAndProof = new VerifiedLedgerHeaderAndProof(
+		LedgerProof ledgerProof = new LedgerProof(
 			mock(BFTHeader.class),
 			mock(BFTHeader.class),
 			0,
 			HashUtils.zero256(),
-			LedgerHeader.create(0, View.of(9), new AccumulatorState(3, HashUtils.zero256()), 1),
+			LedgerHeader.create(0, View.of(9), new AccumulatorState(3, HashUtils.zero256()), 0),
 			new TimestampedECDSASignatures()
 		);
 		VerifiedCommandsAndProof commandsAndProof = new VerifiedCommandsAndProof(
 			ImmutableList.of(cmd0.command(), cmd1.command()),
-			verifiedLedgerHeaderAndProof
+			ledgerProof
 		);
 
 		// Act
@@ -383,19 +376,45 @@ public class RadixEngineStateComputerTest {
 		ECKeyPair keyPair = ECKeyPair.generateNew();
 		RadixEngineCommand cmd0 = systemUpdateCommand(0, 0, 2);
 		RadixEngineCommand cmd1 = registerCommand(keyPair);
-		VerifiedLedgerHeaderAndProof verifiedLedgerHeaderAndProof = new VerifiedLedgerHeaderAndProof(
+		LedgerProof ledgerProof = new LedgerProof(
 			mock(BFTHeader.class),
 			mock(BFTHeader.class),
 			0,
 			HashUtils.zero256(),
-			LedgerHeader.create(0, View.of(9), new AccumulatorState(3, HashUtils.zero256()), 1,
+			LedgerHeader.create(0, View.of(9), new AccumulatorState(3, HashUtils.zero256()), 0,
 				BFTValidatorSet.from(Stream.of(BFTValidator.from(BFTNode.random(), UInt256.ONE)))
 			),
 			new TimestampedECDSASignatures()
 		);
 		VerifiedCommandsAndProof commandsAndProof = new VerifiedCommandsAndProof(
 			ImmutableList.of(cmd1.command(), cmd0.command()),
-			verifiedLedgerHeaderAndProof
+			ledgerProof
+		);
+
+		// Act
+		// Assert
+		assertThatThrownBy(() -> sut.commit(commandsAndProof, null))
+			.isInstanceOf(ByzantineQuorumException.class);
+	}
+
+	// TODO: should catch this and log it somewhere as proof of byzantine quorum
+	@Test
+	public void committing_epoch_change_when_there_shouldnt_be_one__should_fail() {
+		// Arrange
+		RadixEngineCommand cmd0 = systemUpdateCommand(0, 1, 1);
+		LedgerProof ledgerProof = new LedgerProof(
+			mock(BFTHeader.class),
+			mock(BFTHeader.class),
+			0,
+			HashUtils.zero256(),
+			LedgerHeader.create(0, View.of(9), new AccumulatorState(3, HashUtils.zero256()), 0,
+				BFTValidatorSet.from(Stream.of(BFTValidator.from(BFTNode.random(), UInt256.ONE)))
+			),
+			new TimestampedECDSASignatures()
+		);
+		VerifiedCommandsAndProof commandsAndProof = new VerifiedCommandsAndProof(
+			ImmutableList.of(cmd0.command()),
+			ledgerProof
 		);
 
 		// Act

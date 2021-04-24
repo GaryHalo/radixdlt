@@ -36,6 +36,7 @@ import com.google.inject.name.Names;
 import com.google.inject.util.Modules;
 import com.radixdlt.ConsensusRunnerModule;
 import com.radixdlt.FunctionalNodeModule;
+import com.radixdlt.integration.distributed.simulation.monitors.SimulationNodeEventsModule;
 import com.radixdlt.statecomputer.checkpoint.Genesis;
 import com.radixdlt.statecomputer.checkpoint.MockedGenesisAtomModule;
 import com.radixdlt.MockedCryptoModule;
@@ -49,6 +50,7 @@ import com.radixdlt.mempool.MempoolThrottleMs;
 import com.radixdlt.network.addressbook.PeersView;
 import com.radixdlt.store.MockedRadixEngineStoreModule;
 import com.radixdlt.sync.MockedCommittedReaderModule;
+import com.radixdlt.sync.MockedLedgerStatusUpdatesRunnerModule;
 import com.radixdlt.sync.SyncRunnerModule;
 import com.radixdlt.consensus.bft.PacemakerMaxExponent;
 import com.radixdlt.consensus.bft.PacemakerRate;
@@ -64,7 +66,7 @@ import com.radixdlt.integration.distributed.simulation.application.BFTValidatorS
 import com.radixdlt.integration.distributed.simulation.application.CommandGenerator;
 import com.radixdlt.integration.distributed.simulation.application.EpochsNodeSelector;
 import com.radixdlt.integration.distributed.simulation.application.NodeSelector;
-import com.radixdlt.integration.distributed.simulation.invariants.consensus.NodeEvents;
+import com.radixdlt.integration.distributed.simulation.monitors.NodeEvents;
 import com.radixdlt.integration.distributed.simulation.application.LocalMempoolPeriodicSubmitter;
 import com.radixdlt.integration.distributed.simulation.network.SimulationNodes;
 import com.radixdlt.integration.distributed.simulation.network.SimulationNodes.RunningNetwork;
@@ -576,6 +578,8 @@ public class SimulationTest {
 				} else {
 					modules.add(new SyncRunnerModule());
 				}
+			} else if (ledgerType.hasEpochs && !ledgerType.hasSync) {
+				modules.add(new MockedLedgerStatusUpdatesRunnerModule());
 			}
 
 			return new SimulationTest(

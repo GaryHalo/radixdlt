@@ -18,18 +18,23 @@
 package com.radixdlt;
 
 import com.google.inject.AbstractModule;
-import com.google.inject.Key;
 import com.google.inject.Scopes;
 import com.google.inject.TypeLiteral;
 import com.google.inject.multibindings.Multibinder;
-import com.google.inject.multibindings.OptionalBinder;
-import com.radixdlt.chaos.mempoolfiller.MempoolFillerKey;
+import com.radixdlt.client.store.ClientApiStore;
+import com.radixdlt.client.store.berkeley.BerkeleyClientApiStore;
+import com.radixdlt.client.store.berkeley.ScheduledParticleFlush;
 import com.radixdlt.environment.LocalEvents;
-import com.radixdlt.identifiers.RadixAddress;
 import com.radixdlt.mempool.MempoolAddFailure;
-import com.radixdlt.statecomputer.AtomCommittedToLedger;
+import com.radixdlt.statecomputer.AtomsCommittedToLedger;
 import com.radixdlt.statecomputer.AtomsRemovedFromMempool;
+import org.radix.api.http.ChaosController;
+import org.radix.api.http.Controller;
+import org.radix.api.http.FaucetController;
+import org.radix.api.http.NodeController;
 import org.radix.api.http.RadixHttpServer;
+import org.radix.api.http.RpcController;
+import org.radix.api.http.SystemController;
 import org.radix.api.services.AtomsService;
 
 /**
@@ -39,14 +44,21 @@ public final class ApiModule extends AbstractModule {
 	@Override
 	public void configure() {
 		bind(RadixHttpServer.class).in(Scopes.SINGLETON);
+		var controllers = Multibinder.newSetBinder(binder(), Controller.class);
+		controllers.addBinding().to(ChaosController.class).in(Scopes.SINGLETON);
+		controllers.addBinding().to(FaucetController.class).in(Scopes.SINGLETON);
+		controllers.addBinding().to(NodeController.class).in(Scopes.SINGLETON);
+		controllers.addBinding().to(RpcController.class).in(Scopes.SINGLETON);
+		controllers.addBinding().to(SystemController.class).in(Scopes.SINGLETON);
+
 		bind(AtomsService.class).in(Scopes.SINGLETON);
 		var eventBinder = Multibinder.newSetBinder(binder(), new TypeLiteral<Class<?>>() { }, LocalEvents.class)
 				.permitDuplicates();
-		eventBinder.addBinding().toInstance(AtomCommittedToLedger.class);
+		eventBinder.addBinding().toInstance(AtomsCommittedToLedger.class);
 		eventBinder.addBinding().toInstance(MempoolAddFailure.class);
 		eventBinder.addBinding().toInstance(AtomsRemovedFromMempool.class);
+		eventBinder.addBinding().toInstance(ScheduledParticleFlush.class);
 
-		// Set empty optional as default
-		OptionalBinder.newOptionalBinder(binder(), Key.get(RadixAddress.class, MempoolFillerKey.class));
+		bind(ClientApiStore.class).to(BerkeleyClientApiStore.class).in(Scopes.SINGLETON);
 	}
 }

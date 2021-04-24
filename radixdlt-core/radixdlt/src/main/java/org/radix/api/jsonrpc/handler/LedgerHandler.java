@@ -20,20 +20,19 @@ package org.radix.api.jsonrpc.handler;
 import org.json.JSONObject;
 import org.radix.api.services.LedgerService;
 
-import static org.radix.api.jsonrpc.JsonRpcUtil.withNamedParameter;
+import com.google.inject.Inject;
+
+import static org.radix.api.jsonrpc.JsonRpcUtil.withRequiredParameter;
 
 public class LedgerHandler {
 	private final LedgerService ledgerService;
 
+	@Inject
 	public LedgerHandler(LedgerService ledgerService) {
 		this.ledgerService = ledgerService;
 	}
 
 	public JSONObject handleGetAtomStatus(JSONObject request) {
-		return withNamedParameter(request, "aid", (params, aid) -> ledgerService.getAtomStatus(request, aid));
-	}
-
-	public JSONObject handleGetAtoms(JSONObject request) {
-		return withNamedParameter(request, "address", (params, address) -> ledgerService.getAtoms(request, address));
+		return withRequiredParameter(request, "aid", (params, aid) -> ledgerService.getAtomStatus(request, aid));
 	}
 }

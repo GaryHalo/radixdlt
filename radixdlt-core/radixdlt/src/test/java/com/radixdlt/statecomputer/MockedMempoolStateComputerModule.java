@@ -19,7 +19,6 @@ package com.radixdlt.statecomputer;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
-import com.google.common.hash.HashCode;
 import com.google.inject.AbstractModule;
 import com.google.inject.Provides;
 import com.google.inject.Singleton;
@@ -51,18 +50,18 @@ public class MockedMempoolStateComputerModule extends AbstractModule {
 
 	@Provides
 	@Singleton
-	private Mempool<Command, HashCode> mempool(
+	private Mempool<Command> mempool(
 		@MempoolMaxSize int maxSize,
 		SystemCounters systemCounters,
 		Random random,
 		Hasher hasher
 	) {
-		return new SimpleMempool<>(maxSize, hasher::hash, systemCounters, random);
+		return new SimpleMempool(maxSize, hasher::hash, systemCounters, random);
 	}
 
 	@Provides
 	@Singleton
-	private StateComputerLedger.StateComputer stateComputer(Mempool<Command, HashCode> mempool, Hasher hasher) {
+	private StateComputerLedger.StateComputer stateComputer(Mempool<Command> mempool, Hasher hasher) {
 		return new StateComputerLedger.StateComputer() {
 			@Override
 			public void addToMempool(Command command, BFTNode origin) {

@@ -20,6 +20,7 @@ package org.radix.api.http;
 import org.radix.api.services.NetworkService;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.inject.Inject;
 
 import io.undertow.server.HttpServerExchange;
 import io.undertow.server.RoutingHandler;
@@ -27,13 +28,15 @@ import io.undertow.server.RoutingHandler;
 import static org.radix.api.http.RestUtils.getParameter;
 import static org.radix.api.http.RestUtils.respond;
 
-public final class NetworkController {
+public final class NetworkController implements Controller {
 	private final NetworkService networkService;
 
+	@Inject
 	public NetworkController(NetworkService networkService) {
 		this.networkService = networkService;
 	}
 
+	@Override
 	public void configureRoutes(final RoutingHandler handler) {
 		handler.get("/api/network", this::respondWithNetwork);
 		handler.get("/api/network/peers/live", this::respondWithLivePeers);

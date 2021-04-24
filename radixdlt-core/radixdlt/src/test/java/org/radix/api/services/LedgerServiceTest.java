@@ -19,27 +19,19 @@ package org.radix.api.services;
 import org.json.JSONObject;
 import org.junit.Test;
 
-import com.radixdlt.DefaultSerialization;
 import com.radixdlt.crypto.HashUtils;
 import com.radixdlt.identifiers.AID;
-import com.radixdlt.serialization.Serialization;
-import com.radixdlt.store.LedgerEntryStore;
-import com.radixdlt.store.SearchCursor;
+import com.radixdlt.store.AtomIndex;
 
 import static org.junit.Assert.assertEquals;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 public class LedgerServiceTest {
-	private static final String ADDRESS_STRING = "23B6fH3FekJeP6e5guhZAk6n9z4fmTo5Tngo3a11Wg5R8gsWTV2x";
-
 	@Test
 	public void atomStatusIsStoredIfPresentInLedger() {
-		var ledger = mock(LedgerEntryStore.class);
-		var serialization = mock(Serialization.class);
-		var ledgerService = new LedgerService(ledger, serialization);
+		var ledger = mock(AtomIndex.class);
+		var ledgerService = new LedgerService(ledger);
 
 		var request = mock(JSONObject.class);
 		when(request.getString("id")).thenReturn("requestId");
@@ -54,9 +46,8 @@ public class LedgerServiceTest {
 
 	@Test
 	public void atomStatusIsDoesNotExistsIfMissingInLedger() {
-		var ledger = mock(LedgerEntryStore.class);
-		var serialization = mock(Serialization.class);
-		var ledgerService = new LedgerService(ledger, serialization);
+		var ledger = mock(AtomIndex.class);
+		var ledgerService = new LedgerService(ledger);
 
 		var request = mock(JSONObject.class);
 		when(request.getString("id")).thenReturn("requestId");
@@ -67,27 +58,5 @@ public class LedgerServiceTest {
 		var result = ledgerService.getAtomStatus(request, aid.toString());
 
 		assertEquals("DOES_NOT_EXIST", result.getJSONObject("result").getString("status"));
-	}
-
-	@Test
-	public void returnsAllAtomsFoundInLedger() {
-		var ledger = mock(LedgerEntryStore.class);
-		var serialization = DefaultSerialization.getInstance();
-		var ledgerService = new LedgerService(ledger, serialization);
-
-		var request = mock(JSONObject.class);
-		when(request.getString("id")).thenReturn("requestId");
-
-		var aid0 = AID.from(HashUtils.random256().asBytes());
-		var aid1 = AID.from(HashUtils.random256().asBytes());
-		var aid2 = AID.from(HashUtils.random256().asBytes());
-		var cursor = mock(SearchCursor.class);
-		when(ledger.search(any())).thenReturn(cursor);
-		when(cursor.get()).thenReturn(aid0, aid1, aid2);
-		when(cursor.next()).thenReturn(cursor, cursor, null);
-
-		var result = ledgerService.getAtoms(request, ADDRESS_STRING);
-
-		assertEquals(3, result.getJSONArray("result").length());
 	}
 }

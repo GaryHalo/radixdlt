@@ -17,6 +17,7 @@
 
 package org.radix.api.jsonrpc;
 
+import com.radixdlt.atom.Atom;
 import org.json.JSONObject;
 import org.junit.Test;
 import org.radix.api.AtomQuery;
@@ -26,7 +27,6 @@ import org.radix.api.observable.Observable;
 import org.radix.api.observable.ObservedAtomEvents;
 import org.radix.api.services.AtomsService;
 
-import com.radixdlt.atommodel.Atom;
 import com.radixdlt.serialization.Serialization;
 
 import java.util.function.Consumer;
@@ -89,13 +89,11 @@ public class AtomsSubscribeEpicTest {
 
 		var serializer = mock(Serialization.class);
 		var jsonAtom = mock(JSONObject.class);
-
-		when(atomsService.serialization()).thenReturn(serializer);
 		when(serializer.toJsonObject(same(atom), any())).thenReturn(jsonAtom);
 
 		var callback = mock(ConsumerJSONObject.class);
 		var atomQuery = mock(AtomQuery.class);
-		var epic = new AtomsSubscribeEpic(atomsService, json -> atomQuery, callback);
+		var epic = new AtomsSubscribeEpic(atomsService, serializer, json -> atomQuery, callback);
 
 		epic.action(SUBSCRIBE_REQUEST);
 

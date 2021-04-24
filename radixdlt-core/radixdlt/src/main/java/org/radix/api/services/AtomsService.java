@@ -17,6 +17,7 @@
 
 package org.radix.api.services;
 
+import com.google.common.collect.ImmutableSet;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.radix.api.AtomQuery;
@@ -30,22 +31,20 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.google.inject.Inject;
-import com.radixdlt.atommodel.Atom;
 import com.radixdlt.consensus.Command;
 import com.radixdlt.crypto.Hasher;
 import com.radixdlt.environment.EventDispatcher;
 import com.radixdlt.identifiers.AID;
 import com.radixdlt.mempool.MempoolAdd;
 import com.radixdlt.mempool.MempoolAddFailure;
-import com.radixdlt.middleware2.ClientAtom;
+import com.radixdlt.atom.Atom;
 import com.radixdlt.serialization.DeserializeException;
 import com.radixdlt.serialization.DsonOutput;
 import com.radixdlt.serialization.DsonOutput.Output;
 import com.radixdlt.serialization.Serialization;
-import com.radixdlt.statecomputer.AtomCommittedToLedger;
+import com.radixdlt.statecomputer.AtomsCommittedToLedger;
 import com.radixdlt.statecomputer.AtomsRemovedFromMempool;
-import com.radixdlt.statecomputer.CommittedAtom;
-import com.radixdlt.store.LedgerEntryStore;
+import com.radixdlt.store.AtomIndex;
 
 import java.util.List;
 import java.util.Map;
@@ -79,13 +78,13 @@ public class AtomsService {
 	private final Object singleAtomObserversLock = new Object();
 	private final Map<AID, List<AtomStatusListener>> singleAtomObservers = Maps.newHashMap();
 
-	private final LedgerEntryStore store;
+	private final AtomIndex store;
 	private final CompositeDisposable disposable;
 
 	private final EventDispatcher<MempoolAdd> mempoolAddEventDispatcher;
 	private final Observable<AtomsRemovedFromMempool> mempoolAtomsRemoved;
 	private final Observable<MempoolAddFailure> mempoolAddFailures;
-	private final Observable<AtomCommittedToLedger> ledgerCommitted;
+	private final Observable<AtomsCommittedToLedger> ledgerCommitted;
 
 	private final Hasher hasher;
 	private final Serialization serialization;
@@ -94,8 +93,8 @@ public class AtomsService {
 	public AtomsService(
 		Observable<AtomsRemovedFromMempool> mempoolAtomsRemoved,
 		Observable<MempoolAddFailure> mempoolAddFailures,
-		Observable<AtomCommittedToLedger> ledgerCommitted,
-		LedgerEntryStore store,
+		Observable<AtomsCommittedToLedger> ledgerCommitted,
+		AtomIndex store,
 		EventDispatcher<MempoolAdd> mempoolAddEventDispatcher,
 		Hasher hasher,
 		Serialization serialization
@@ -108,10 +107,6 @@ public class AtomsService {
 		this.ledgerCommitted = ledgerCommitted;
 		this.hasher = hasher;
 		this.serialization = serialization;
-	}
-
-	public Serialization serialization() {
-		return serialization;
 	}
 
 	public void start() {
@@ -138,12 +133,9 @@ public class AtomsService {
 
 	public AID submitAtom(JSONObject jsonAtom) {
 		// TODO: remove all of the conversion mess here
-		final var rawAtom = this.serialization.fromJsonObject(jsonAtom, Atom.class);
-		final var atom = ClientAtom.convertFromApiAtom(rawAtom, hasher);
-
+		final var atom = this.serialization.fromJsonObject(jsonAtom, Atom.class);
 		var command = new Command(serialization.toDson(atom, Output.ALL));
 		this.mempoolAddEventDispatcher.dispatch(MempoolAdd.create(command));
-
 		return atom.getAID();
 	}
 
@@ -171,8 +163,7 @@ public class AtomsService {
 
 	public Optional<JSONObject> getAtomByAtomId(AID atomId) throws JSONException {
 		return store.get(atomId)
-			.map(ClientAtom::convertToApiAtom)
-			.map(apiAtom -> serialization.toJsonObject(apiAtom, DsonOutput.Output.API));
+			.map(atom -> serialization.toJsonObject(atom, DsonOutput.Output.API));
 	}
 
 	private AtomEventObserver createAtomObserver(AtomQuery atomQuery, Consumer<ObservedAtomEvents> observer) {
@@ -181,17 +172,21 @@ public class AtomsService {
 		);
 	}
 
-	private void processExecutedCommand(AtomCommittedToLedger atomCommittedToLedger) {
-		var committedAtom = atomCommittedToLedger.getAtom();
+	private void processExecutedCommand(AtomsCommittedToLedger atomsCommittedToLedger) {
+		atomsCommittedToLedger.getAtoms().forEach(atom -> {
+			var indicies = atom.upParticles()
+				.flatMap(p -> p.getDestinations().stream())
+				.collect(ImmutableSet.toImmutableSet());
 
-		this.atomEventObservers.forEach(observer -> observer.tryNext(committedAtom, atomCommittedToLedger.getIndices()));
-		getAtomStatusListeners(committedAtom.getAID()).forEach(listener -> listener.onStored(committedAtom));
+			this.atomEventObservers.forEach(observer -> observer.tryNext(atom, indicies));
+			getAtomStatusListeners(atom.getAID()).forEach(listener -> listener.onStored(atom));
+		});
 	}
 
 	private void processSubmissionFailure(MempoolAddFailure failure) {
 		failure.getCommand()
 			.map(this::toClientAtom)
-			.map(ClientAtom::getAID)
+			.map(Atom::getAID)
 			.map(this::getAtomStatusListeners)
 			.ifPresent(list -> list.forEach(listener -> listener.onError(failure.getException())));
 	}
@@ -203,9 +198,9 @@ public class AtomsService {
 		});
 	}
 
-	private Optional<ClientAtom> toClientAtom(final byte[] payload) {
+	private Optional<Atom> toClientAtom(final byte[] payload) {
 		try {
-			return of(serialization.fromDson(payload, ClientAtom.class));
+			return of(serialization.fromDson(payload, Atom.class));
 		} catch (DeserializeException e) {
 			return empty();
 		}

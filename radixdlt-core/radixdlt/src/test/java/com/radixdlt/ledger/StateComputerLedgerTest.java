@@ -34,7 +34,7 @@ import com.radixdlt.consensus.LedgerHeader;
 import com.radixdlt.consensus.QuorumCertificate;
 import com.radixdlt.consensus.TimestampedECDSASignatures;
 import com.radixdlt.consensus.UnverifiedVertex;
-import com.radixdlt.consensus.VerifiedLedgerHeaderAndProof;
+import com.radixdlt.consensus.LedgerProof;
 import com.radixdlt.consensus.bft.BFTNode;
 import com.radixdlt.consensus.bft.BFTValidator;
 import com.radixdlt.consensus.bft.BFTValidatorSet;
@@ -45,7 +45,6 @@ import com.radixdlt.consensus.Sha256Hasher;
 import com.radixdlt.crypto.HashUtils;
 import com.radixdlt.crypto.Hasher;
 import com.radixdlt.environment.EventDispatcher;
-import com.radixdlt.identifiers.AID;
 import com.radixdlt.ledger.StateComputerLedger.PreparedCommand;
 import com.radixdlt.ledger.StateComputerLedger.StateComputer;
 import com.radixdlt.counters.SystemCounters;
@@ -65,13 +64,13 @@ import org.junit.Test;
 
 public class StateComputerLedgerTest {
 
-	private Mempool<Command, AID> mempool;
+	private Mempool<Command> mempool;
 	private StateComputer stateComputer;
 	private StateComputerLedger sut;
 	private EventDispatcher<LedgerUpdate> ledgerUpdateSender;
-	private VerifiedLedgerHeaderAndProof currentLedgerHeader;
+	private LedgerProof currentLedgerHeader;
 	private SystemCounters counters;
-	private Comparator<VerifiedLedgerHeaderAndProof> headerComparator;
+	private Comparator<LedgerProof> headerComparator;
 	private LedgerAccumulator accumulator;
 	private LedgerAccumulatorVerifier accumulatorVerifier;
 
@@ -231,7 +230,7 @@ public class StateComputerLedgerTest {
 			accumulatorState,
 			1234
 		);
-		final VerifiedLedgerHeaderAndProof header = new VerifiedLedgerHeaderAndProof(
+		final LedgerProof header = new LedgerProof(
 			mock(BFTHeader.class),
 			mock(BFTHeader.class),
 			12345,
